@@ -1,3 +1,4 @@
+PASTE YOUR FULL MASTER PLAN HERE
 # Verdict — AI Courtroom
 ### New England Inter-Collegiate AI Hackathon · March 28-29, 2026
 ### Team: Tensor Monk | Track: AI Innovation Hack
