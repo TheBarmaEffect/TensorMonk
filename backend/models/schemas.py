@@ -222,6 +222,9 @@ class StreamEvent(BaseModel):
         "verdict_complete",
         "synthesis_start",
         "synthesis_complete",
+        "quality_gate",
+        "stability_check",
+        "calibration_update",
         "error",
     ]
     agent: Optional[str] = None
