@@ -69,7 +69,7 @@ Build a **multi-agent adversarial AI courtroom** that takes any decision or idea
 |---------|--------|----------|
 | Rate limiting middleware | ✅ | Token bucket per-IP in `middleware/rate_limiter.py` |
 | Request timing + correlation IDs | ✅ | X-Request-ID, X-Response-Time headers |
-| Retry with exponential backoff | ✅ | Wired into all 5 agent LLM calls |
+| Retry with exponential backoff | ✅ | Wired into all 6 agent LLM calls |
 | Circuit breaker | ✅ | 3-state (CLOSED/OPEN/HALF_OPEN) |
 | TTL cache for domain detection | ✅ | Wired into detect-domain endpoint |
 | Pipeline performance metrics | ✅ | `/metrics` endpoint with per-agent stats |
@@ -80,13 +80,13 @@ Build a **multi-agent adversarial AI courtroom** that takes any decision or idea
 | Security middleware (XSS, headers) | ✅ | `middleware/security.py` with 7 XSS patterns |
 | Session state machine (FSM) | ✅ | `services/session_manager.py` with 5 states |
 | Pipeline graph visualization | ✅ | `services/graph_visualizer.py` + `PipelineGraph.jsx` |
-| Centralized prompt templates | ✅ | `agents/prompts.py` with directive auditing |
+| Centralized prompt templates | ✅ | `agents/prompts.py` — format instructions shared, constitutional directives audited |
 | Session analytics aggregation | ✅ | `GET /sessions/analytics` endpoint |
 | Keyboard shortcuts | ✅ | `useKeyboardShortcuts.js` with 6 shortcuts |
 | ARIA accessibility | ✅ | roles, labels, described-by on LandingInput, MicButton, PipelineGraph |
 | Async event bus (Observer pattern) | ✅ | `utils/event_bus.py` with topic pub/sub |
 | Confidence calibration (ECE) | ✅ | `utils/confidence_calibration.py` per-agent tracking |
-| Domain-aware input validators | ✅ | `utils/validators.py` with quality scoring |
+| Domain-aware input validators | ✅ | `utils/validators.py` — wired into API routes + research node |
 | Pipeline metrics + event bus wired into all graph nodes | ✅ | Every node emits start/complete/error events with rich payloads |
 | Adaptive temperature from research quality | ✅ | `_adaptive_temperature()` adjusts prosecutor/defense LLM temp |
 | Witness-calibrated confidence tracking | ✅ | `_calibrate_from_witnesses()` uses verdicts as ground truth |
