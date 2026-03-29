@@ -13,7 +13,7 @@ verdict/
 │   ├── models/             # Pydantic v2 schemas with field validators
 │   ├── services/           # Export pipeline, graph viz, session FSM
 │   ├── utils/              # Cache, errors, logging, metrics, resilience
-│   └── tests/              # 212+ tests across 15 files (pytest)
+│   └── tests/              # 234+ tests across 16 files (pytest)
 ├── frontend/               # React 18 + Vite SPA
 │   ├── src/components/     # 15+ React components
 │   ├── src/hooks/          # Custom hooks (useVerdict, useVoiceInput, useKeyboardShortcuts)
