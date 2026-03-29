@@ -55,6 +55,8 @@ class SynthesisAgent:
         output_format: str = "executive",
         domain: str = "business",
         stream_callback: Optional[Callable] = None,
+        verdict_stability: Optional[dict] = None,
+        argument_quality: Optional[dict] = None,
     ) -> Synthesis:
         """Synthesize an improved idea from the full proceeding.
 
@@ -67,6 +69,11 @@ class SynthesisAgent:
             verdict: The judge's final ruling.
             output_format: Style of synthesis output (executive/technical/legal/investor).
             stream_callback: Async callback for stream events.
+            verdict_stability: Stability analysis from verdict node (robustness,
+                evidence margin, flip rate). When the verdict is fragile, synthesis
+                should be more cautious in its recommendations.
+            argument_quality: Quality grades for both sides. Used to weight which
+                side's arguments deserve more attention in the synthesis.
 
         Returns:
             A Synthesis with the improved idea.
@@ -120,6 +127,30 @@ class SynthesisAgent:
                 f"  The {stronger}'s arguments were stronger — weight your synthesis accordingly.\n"
             )
 
+        # Build stability-aware guidance — when verdict is fragile, synthesis
+        # should be more cautious and hedge its recommendations.
+        stability_guidance = ""
+        if verdict_stability:
+            robustness = verdict_stability.get("combined_robustness", 1.0)
+            is_robust = verdict_stability.get("verdict_is_robust", True)
+            margin = verdict_stability.get("evidence_margin", "unknown")
+            if not is_robust:
+                stability_guidance = (
+                    f"\n\nVERDICT STABILITY WARNING:\n"
+                    f"  Robustness: {robustness:.2f} (FRAGILE)\n"
+                    f"  Evidence margin: {margin}\n"
+                    f"  The verdict is not robust under perturbation — your synthesis "
+                    f"should include contingency plans and hedge recommendations "
+                    f"appropriately. Flag areas where the evidence was razor-thin.\n"
+                )
+            elif margin in ("narrow", "razor_thin"):
+                stability_guidance = (
+                    f"\n\nVERDICT STABILITY NOTE:\n"
+                    f"  Evidence margin: {margin}\n"
+                    f"  While the verdict held, the margin was narrow — note this "
+                    f"in your recommendations and suggest monitoring triggers.\n"
+                )
+
         prompt = (
             f"ORIGINAL DECISION: {decision_question}\n\n"
             f"RESEARCH SUMMARY: {research_package.get('summary', '')}\n\n"
@@ -131,7 +162,8 @@ class SynthesisAgent:
             f"JUDGE VERDICT: {verdict.ruling.upper()}\n"
             f"REASONING: {verdict.reasoning}\n"
             f"KEY FACTORS: {', '.join(verdict.key_factors)}\n"
-            f"{quality_guidance}\n"
+            f"{quality_guidance}"
+            f"{stability_guidance}\n"
             f"Output format: {output_format} — tailor your synthesis to this audience.\n"
             f"{anchor_block}\n\n"
             "Now produce a STRONGER, battle-tested version of the original idea "
