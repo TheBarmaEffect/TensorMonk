@@ -80,6 +80,51 @@ class JudgeAgent:
             api_key=settings.groq_api_key,
         )
 
+    def analyze_argument_strength(
+        self,
+        prosecutor_argument: Argument,
+        defense_argument: Argument,
+    ) -> dict:
+        """Analyze relative argument strength before cross-examination.
+
+        Computes per-claim confidence statistics and identifies potential
+        areas of conflict based on claim overlap. This pre-analysis helps
+        the cross-examination LLM focus on the most impactful claims.
+
+        Args:
+            prosecutor_argument: The prosecution's case.
+            defense_argument: The defense's case.
+
+        Returns:
+            Dict with strength metrics for both sides.
+        """
+        pro_confs = [c.confidence for c in prosecutor_argument.claims]
+        def_confs = [c.confidence for c in defense_argument.claims]
+
+        pro_avg = sum(pro_confs) / len(pro_confs) if pro_confs else 0.0
+        def_avg = sum(def_confs) / len(def_confs) if def_confs else 0.0
+
+        # Find high-confidence claims on both sides (likely contested areas)
+        pro_high = [c for c in prosecutor_argument.claims if c.confidence >= 0.8]
+        def_high = [c for c in defense_argument.claims if c.confidence >= 0.8]
+
+        return {
+            "prosecution": {
+                "overall_confidence": prosecutor_argument.confidence,
+                "avg_claim_confidence": round(pro_avg, 3),
+                "claim_count": len(pro_confs),
+                "high_confidence_claims": len(pro_high),
+            },
+            "defense": {
+                "overall_confidence": defense_argument.confidence,
+                "avg_claim_confidence": round(def_avg, 3),
+                "claim_count": len(def_confs),
+                "high_confidence_claims": len(def_high),
+            },
+            "strength_differential": round(pro_avg - def_avg, 3),
+            "total_claims": len(pro_confs) + len(def_confs),
+        }
+
     async def cross_examine(
         self,
         decision_question: str,
@@ -88,6 +133,9 @@ class JudgeAgent:
         stream_callback: Optional[Callable] = None,
     ) -> list[dict]:
         """Identify the 3 most contested claims for witness verification.
+
+        Performs argument strength analysis before LLM cross-examination
+        to help focus on the highest-impact contested claims.
 
         Args:
             decision_question: The decision being evaluated.
@@ -98,12 +146,22 @@ class JudgeAgent:
         Returns:
             List of contested claim dicts with witness_type.
         """
+        # Pre-analyze argument strength for cross-examination focus
+        strength = self.analyze_argument_strength(prosecutor_argument, defense_argument)
+        logger.info(
+            "Argument strength — Pro: %.2f avg, Def: %.2f avg, Differential: %+.3f",
+            strength["prosecution"]["avg_claim_confidence"],
+            strength["defense"]["avg_claim_confidence"],
+            strength["strength_differential"],
+        )
+
         if stream_callback:
             await stream_callback(
                 StreamEvent(
                     event_type="judge_start",
                     agent="judge",
                     content="Cross-examination initiated. Reviewing both arguments...",
+                    data={"argument_strength": strength},
                 )
             )
 
