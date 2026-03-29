@@ -89,6 +89,9 @@ User Input (question + context + output_format)
 | State management | Zustand |
 | Charts | Recharts (scope-trimmed, see below) |
 | PDF generation | fpdf2 |
+| DOCX generation | python-docx |
+| Rate limiting | Token bucket middleware (in-memory) |
+| Resilience | Circuit breaker + exponential backoff |
 | Containerization | Docker + docker-compose |
 
 ## What's Built and Working
@@ -111,7 +114,16 @@ User Input (question + context + output_format)
 - Session history: persistent JSON-backed session store via `GET /api/verdict/sessions/history`, displayed in frontend `SessionHistory` component
 - Verdict sharing: `GET /api/verdict/{id}/share` generates short URL token, `GET /shared/{token}` retrieves results
 - Web search grounding: Research Agent queries Tavily (or DuckDuckGo fallback) for current facts before LLM analysis
-- 40 unit tests: Pydantic schemas, graph topology, conditional edges, API contract (pytest)
+- 89 unit tests across 8 test files: schemas, graph topology, API contracts, exports, resilience, cache, middleware, domain config (pytest)
+- Input validation on all API request models (question length, context length, format enum)
+- Rate limiting middleware: token bucket per IP with configurable RPM/burst
+- Request timing middleware: X-Request-ID + X-Response-Time headers on all responses
+- Retry with exponential backoff + jitter for transient LLM failures
+- Circuit breaker (CLOSED/OPEN/HALF_OPEN) for external service fault tolerance
+- TTL cache for domain detection to reduce redundant LLM calls
+- Deep health check: Groq API, Redis, session store, uptime reporting
+- Graceful startup/shutdown lifecycle handlers with structured logging
+- Session-aware structured logging via contextvars for async correlation IDs
 
 **Frontend (fully functional)**
 - Sequential ACT-based courtroom UI (5 Acts: Investigation, Debate, Cross-Examination, Ruling, Synthesis)
@@ -127,6 +139,8 @@ User Input (question + context + output_format)
 - Analytics panel: Recharts BarChart (claim confidence), RadarChart (argument comparison), StatCards, witness verdicts — wired to live agent data
 - Comparison mode: side-by-side prosecution vs defense view with strength bars, aligned claims, confidence indicators, and witness verdict summary
 - Domain-specific PDF reports: 9 domain color themes (business gold, legal indigo, medical red, financial emerald, etc.) with accent-colored titles, section headers, and dividers
+- WebSocket reconnection with exponential backoff (5 attempts, jitter, clean disconnect)
+- Robust export download helper with error handling, response validation, and user feedback
 
 **Deployment**
 - Frontend live on Vercel: [https://frontend-phi-ten-83.vercel.app](https://frontend-phi-ten-83.vercel.app)
