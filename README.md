@@ -245,6 +245,7 @@ docker-compose up --build
 | `POST` | `/api/verdict/{id}/followup` | Context-aware follow-up Q&A |
 | `GET` | `/api/verdict/{id}/share` | Generate shareable verdict URL token |
 | `GET` | `/api/verdict/shared/{token}` | Retrieve verdict by share token |
+| `GET` | `/api/verdict/{id}/analysis` | Argument quality, stability, and dependency graph analysis |
 | `GET` | `/api/verdict/{id}/graph` | Pipeline graph visualization for session |
 | `GET` | `/api/verdict/graph/topology` | Static pipeline topology diagram |
 | `GET` | `/api/verdict/sessions/analytics` | Aggregate session analytics |
