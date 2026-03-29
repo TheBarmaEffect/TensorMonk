@@ -962,6 +962,20 @@ def _confidence_gate(state: VerdictState) -> str:
     n = len(confidences)
     avg_confidence = sum(confidences) / n
 
+    # Apply Platt scaling correction if calibrator has been fitted
+    # This corrects systematic over/under-confidence in witness agents.
+    try:
+        from utils.confidence_calibration import ConfidenceCalibrator
+        calibrator = ConfidenceCalibrator()
+        if hasattr(calibrator, '_platt_a') and calibrator._platt_a is not None:
+            calibrated = calibrator.calibrate_confidence(avg_confidence)
+            logger.debug(
+                "Platt calibration: raw=%.3f → calibrated=%.3f", avg_confidence, calibrated
+            )
+            avg_confidence = calibrated
+    except Exception:
+        pass  # Calibration is optional — graceful degradation
+
     # Factor 2: Witness agreement ratio — what fraction of witnesses agree?
     # High disagreement (e.g., one sustained, one overruled) suggests the
     # evidence is genuinely contested and warrants careful review.
