@@ -69,7 +69,7 @@ User Input (question + context + output_format)
 - **Adversarial Isolation**: Prosecutor and defense run in parallel and never see each other's output. The judge is the first node to receive both.
 - **Hallucination Guard**: Agent outputs are validated against Pydantic schemas. Malformed JSON triggers a retry with `temperature=0.3` for deterministic recovery.
 - **Checkpointing**: LangGraph `AsyncRedisSaver` for production fault tolerance (falls back to `MemorySaver` when `REDIS_URL` is unset). State persisted at every node for resume/replay.
-- **Human-in-the-Loop (Architecture Ready)**: `interrupt_before=['verdict_with_review']` infrastructure is built — the confidence gate routes low-confidence verdicts to a review node. Enable via `build_verdict_graph(interrupt_before_verdict=True)` when deploying with human reviewers.
+- **Human-in-the-Loop**: `interrupt_before=['verdict_with_review']` activates via `INTERRUPT_BEFORE_VERDICT=true` env var — the confidence gate routes low-confidence verdicts to a review node where human reviewers can intervene before the final ruling.
 - **Dynamic Witness Spawning**: Conditional edges route through `_should_spawn_witnesses` — the Judge's cross-examination determines which claims are contested and what witness type to spawn for each. If no claims are contested, witnesses are skipped entirely.
 - **Domain-Aware Constitutional Overlays**: Loaded from `backend/config/domains.yaml` at runtime — each domain defines argumentation constraints, evidence hierarchy, and few-shot synthesis anchors.
 
@@ -121,7 +121,7 @@ User Input (question + context + output_format)
 - Rate limiting middleware: token bucket per IP with configurable RPM/burst
 - Request timing middleware: X-Request-ID + X-Response-Time headers on all responses
 - Retry with exponential backoff + jitter for transient LLM failures
-- Circuit breaker (CLOSED/OPEN/HALF_OPEN) for external service fault tolerance
+- Circuit breaker (CLOSED/OPEN/HALF_OPEN) wired into LLM retry path via `call_llm_with_resilience()` for external service fault tolerance
 - TTL cache for domain detection to reduce redundant LLM calls
 - Deep health check: Groq API, Redis, session store, uptime reporting
 - Graceful startup/shutdown lifecycle handlers with structured logging
@@ -130,7 +130,7 @@ User Input (question + context + output_format)
 - Pipeline performance metrics: per-agent durations, success/failure counts, exposed via `/metrics` endpoint
 - Security middleware: XSS pattern detection, HTML entity sanitization, body size limits, security headers
 - Shared LLM utilities: `utils/llm_helpers.py` — all 6 agents use `parse_llm_json()`, `create_llm()`, `emit_thinking_phases()`, and `retry_with_low_temperature()` (eliminated ~160 lines of duplicated boilerplate)
-- Centralized prompt templates: format instructions shared via `agents/prompts.py` with constitutional directive auditing
+- Centralized prompt templates: ALL 6 agent system prompts defined in `agents/prompts.py` — zero inline prompt definitions, single source of truth for constitutional directives
 - Session analytics: aggregate ruling distribution, domain breakdown, format usage via `/sessions/analytics`
 - Pipeline graph visualization: structured topology generation with dynamic witness nodes and routing paths
 - Async event bus: topic-based pub/sub with fire-and-forget delivery for pipeline observability
@@ -305,6 +305,8 @@ Connect to `ws://localhost:8000/api/verdict/{session_id}/stream` to receive real
 |----------|----------|---------|-------------|
 | `GROQ_API_KEY` | Yes | — | Groq API key for LLM inference |
 | `REDIS_URL` | No | — | Redis connection string for production checkpointing (`redis://host:6379/0`) |
+| `INTERRUPT_BEFORE_VERDICT` | No | — | Set to `true` to enable human-in-the-loop review before verdict |
+| `TAVILY_API_KEY` | No | — | Tavily API key for high-quality web search grounding (falls back to DuckDuckGo) |
 | `LOG_LEVEL` | No | `INFO` | Python logging level |
 
 ---

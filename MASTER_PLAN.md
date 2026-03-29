@@ -13,7 +13,7 @@ Build a **multi-agent adversarial AI courtroom** that takes any decision or idea
 
 ### 2. Confidence-Based Routing (ADR-002)
 - Three verdict paths: normal, low-confidence review, hallucination guard (temperature=0.3)
-- Witness confidence < 0.6 routes to `verdict_with_review` node; `interrupt_before` enabled via flag
+- Witness confidence < 0.6 routes to `verdict_with_review` node; `interrupt_before` activated via `INTERRUPT_BEFORE_VERDICT` env var
 - Confidence > 0.9 with majority overruled triggers low-temperature retry
 
 ### 3. Domain-Aware Overlays (ADR-003)
@@ -70,7 +70,7 @@ Build a **multi-agent adversarial AI courtroom** that takes any decision or idea
 | Rate limiting middleware | ✅ | Token bucket per-IP in `middleware/rate_limiter.py` |
 | Request timing + correlation IDs | ✅ | X-Request-ID, X-Response-Time headers |
 | Retry with exponential backoff | ✅ | Wired into all 6 agent LLM calls |
-| Circuit breaker | ✅ | 3-state (CLOSED/OPEN/HALF_OPEN) |
+| Circuit breaker | ✅ | 3-state (CLOSED/OPEN/HALF_OPEN) — wired into LLM calls via `call_llm_with_resilience()` |
 | TTL cache for domain detection | ✅ | Wired into detect-domain endpoint |
 | Pipeline performance metrics | ✅ | `/metrics` endpoint with per-agent stats |
 | Structured error hierarchy | ✅ | VerdictError → AgentError/SessionError/ExportError |
@@ -80,7 +80,7 @@ Build a **multi-agent adversarial AI courtroom** that takes any decision or idea
 | Security middleware (XSS, headers) | ✅ | `middleware/security.py` with 7 XSS patterns |
 | Session state machine (FSM) | ✅ | `services/session_manager.py` — wired into routes for created→running→complete/error transitions |
 | Pipeline graph visualization | ✅ | `services/graph_visualizer.py` + `PipelineGraph.jsx` |
-| Centralized prompt templates | ✅ | `agents/prompts.py` — format instructions shared, constitutional directives audited |
+| Centralized prompt templates | ✅ | `agents/prompts.py` — ALL 6 agent system prompts imported from single source, zero inline prompt definitions |
 | Session analytics aggregation | ✅ | `GET /sessions/analytics` endpoint |
 | Keyboard shortcuts | ✅ | `useKeyboardShortcuts.js` with 6 shortcuts |
 | ARIA accessibility | ✅ | roles, labels, described-by on LandingInput, MicButton, PipelineGraph |
