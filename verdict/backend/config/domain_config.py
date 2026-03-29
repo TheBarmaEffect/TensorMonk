@@ -70,3 +70,8 @@ def get_synthesis_anchors(domain: str) -> list[str]:
 def get_suggested_format(domain: str) -> str:
     """Get the suggested output format for a domain."""
     return get_domain_config(domain).get("suggested_format", "executive")
+
+
+def list_domains() -> list[str]:
+    """Return all configured domain names, sorted alphabetically."""
+    return sorted(_load_domains().keys())
