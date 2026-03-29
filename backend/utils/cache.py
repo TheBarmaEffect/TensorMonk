@@ -93,6 +93,14 @@ class TTLCache:
         normalized = self._normalize_key(key)
         self._store[normalized] = (time.monotonic(), value)
 
+    def contains(self, key: str) -> bool:
+        """Check if a non-expired entry exists without affecting hit/miss stats."""
+        normalized = self._normalize_key(key)
+        entry = self._store.get(normalized)
+        if entry is None:
+            return False
+        return (time.monotonic() - entry[0]) <= self.ttl
+
     def clear(self) -> None:
         """Clear all cached entries."""
         self._store.clear()
