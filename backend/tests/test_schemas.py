@@ -133,3 +133,15 @@ class TestStreamEvent:
             data={"summary": "Market is favorable"},
         )
         assert e.data["summary"] == "Market is favorable"
+
+    def test_quality_gate_event(self):
+        e = StreamEvent(event_type="quality_gate", agent="judge", content="Quality check")
+        assert e.event_type == "quality_gate"
+
+    def test_stability_check_event(self):
+        e = StreamEvent(event_type="stability_check", content="Checking verdict stability")
+        assert e.event_type == "stability_check"
+
+    def test_calibration_update_event(self):
+        e = StreamEvent(event_type="calibration_update", data={"method": "platt"})
+        assert e.event_type == "calibration_update"
