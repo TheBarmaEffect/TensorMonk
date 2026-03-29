@@ -67,3 +67,19 @@ class TestTTLCache:
         assert cache.get("key1") is None
         assert cache.get("key2") is None
         assert cache.stats["size"] == 0
+
+    def test_contains_without_stats_impact(self):
+        cache = TTLCache(ttl_seconds=60)
+        cache.set("key", "value")
+        # contains should not affect hit/miss counters
+        hits_before = cache.stats["hits"]
+        assert cache.contains("key") is True
+        assert cache.contains("missing") is False
+        assert cache.stats["hits"] == hits_before  # Unchanged
+
+    def test_contains_expired_returns_false(self):
+        cache = TTLCache(ttl_seconds=0)  # Immediate expiry
+        cache.set("key", "value")
+        import time
+        time.sleep(0.01)
+        assert cache.contains("key") is False
