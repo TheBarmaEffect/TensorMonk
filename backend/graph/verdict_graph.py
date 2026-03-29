@@ -43,6 +43,7 @@ from utils.metrics import pipeline_metrics
 from utils.confidence_calibration import calibration_tracker
 from utils.argument_graph import build_argument_graphs
 from utils.verdict_stability import full_stability_analysis
+from utils.argument_quality import score_argument_quality
 
 
 def strip_authorship(research_package: dict) -> dict:
@@ -362,8 +363,19 @@ async def parallel_arguments_node(state: VerdictState) -> dict:
     merged["prosecutor_argument"] = pro_result.get("prosecutor_argument")
     merged["defense_argument"] = def_result.get("defense_argument")
 
-    # Constitutional compliance validation — verify both sides argue as directed
+    # Argument quality scoring — evaluate both sides before cross-examination
     tid = state.get("thread_id", "")
+    pro_quality = score_argument_quality(merged["prosecutor_argument"])
+    def_quality = score_argument_quality(merged["defense_argument"])
+    await pipeline_event_bus.publish(PipelineEvent(
+        topic="pipeline.argument_quality", session_id=tid,
+        payload={
+            "prosecutor": {"grade": pro_quality["grade"], "overall": pro_quality["overall"]},
+            "defense": {"grade": def_quality["grade"], "overall": def_quality["overall"]},
+        },
+    ))
+
+    # Constitutional compliance validation — verify both sides argue as directed
     pro_compliance = _validate_constitutional_compliance(
         merged["prosecutor_argument"], "prosecutor"
     )
