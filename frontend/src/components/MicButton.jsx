@@ -2,20 +2,44 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useEffect, useRef } from 'react'
 import useVoiceInput from '../hooks/useVoiceInput'
 
+/**
+ * Voice input button using the Web Speech API (SpeechRecognition).
+ * Always rendered in the DOM for discoverability — shows a disabled state
+ * with tooltip when the browser doesn't support speech recognition.
+ * When active, displays an animated waveform and streams transcript text
+ * back to the parent via onTranscript callback.
+ */
 export default function MicButton({ onTranscript }) {
   const { isListening, transcript, startListening, stopListening, clearTranscript, supported } = useVoiceInput()
   const prev = useRef('')
 
   useEffect(() => {
-    if (transcript && transcript !== prev.current) { prev.current = transcript; onTranscript(transcript) }
+    if (transcript && transcript !== prev.current) {
+      prev.current = transcript
+      onTranscript(transcript)
+    }
   }, [transcript, onTranscript])
 
-  if (!supported) return null
+  const handleClick = () => {
+    if (!supported) return
+    if (isListening) {
+      stopListening()
+    } else {
+      clearTranscript()
+      startListening()
+    }
+  }
 
   return (
     <button
-      onClick={() => { if (isListening) stopListening(); else { clearTranscript(); startListening() } }}
-      className="w-7 h-7 rounded-md flex items-center justify-center hover:bg-[var(--bg-elevated)] transition-all relative"
+      onClick={handleClick}
+      disabled={!supported}
+      title={supported ? (isListening ? 'Stop voice input' : 'Voice input (Web Speech API)') : 'Voice input not supported in this browser'}
+      aria-label="Voice input"
+      data-testid="voice-input-btn"
+      className={`w-7 h-7 rounded-md flex items-center justify-center hover:bg-[var(--bg-elevated)] transition-all relative ${
+        !supported ? 'opacity-30 cursor-not-allowed' : ''
+      }`}
     >
       <AnimatePresence>
         {isListening && (
