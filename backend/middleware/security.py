@@ -38,6 +38,16 @@ _SECURITY_HEADERS = {
     "X-XSS-Protection": "1; mode=block",
     "Referrer-Policy": "strict-origin-when-cross-origin",
     "Permissions-Policy": "camera=(), microphone=(self), geolocation=()",
+    "Content-Security-Policy": (
+        "default-src 'self'; "
+        "script-src 'self'; "
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+        "font-src 'self' https://fonts.gstatic.com; "
+        "connect-src 'self' wss: ws:; "
+        "img-src 'self' data:; "
+        "frame-ancestors 'none'"
+    ),
+    "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
 }
 
 # Maximum request body size (bytes) — prevents memory exhaustion
