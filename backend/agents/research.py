@@ -17,6 +17,8 @@ from typing import Callable, Optional
 import httpx
 from langchain_core.messages import SystemMessage, HumanMessage
 
+from agents.prompts import get_format_instruction
+
 from models.schemas import StreamEvent
 from utils.resilience import retry_with_backoff
 from utils.llm_helpers import parse_llm_json, emit_thinking_phases, create_llm
@@ -145,18 +147,13 @@ class ResearchAgent:
                 )
             )
 
-        format_instruction = {
-            "executive": "Focus on strategic implications and high-level business impact.",
-            "technical": "Include technical depth, implementation complexity, and architecture considerations.",
-            "legal": "Emphasize regulatory context, legal precedents, and compliance requirements.",
-            "investor": "Highlight market size, growth metrics, competitive landscape, and financial projections.",
-        }.get(output_format, "")
+        format_instruction = get_format_instruction(output_format)
 
         prompt = f"Decision under analysis: {decision_question}"
         if context:
             prompt += f"\n\nAdditional context: {context}"
         if format_instruction:
-            prompt += f"\n\nFormat guidance: {format_instruction}"
+            prompt += f"\n\n{format_instruction}"
         prompt += f"\nDomain: {domain}"
 
         messages = [
