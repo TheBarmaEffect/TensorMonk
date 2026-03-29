@@ -22,7 +22,7 @@ We introduce three analytical feedback systems that run alongside the main pipel
 - No additional LLM calls — pure numerical analysis of existing evidence scores
 
 ### 3. Argument Quality Scoring (`utils/argument_quality.py`)
-- 5-dimension heuristic assessment: evidence specificity (regex patterns), claim diversity (pairwise overlap), confidence calibration (internal consistency), opening coherence (keyword alignment), actionability (testable assertions)
+- 6-dimension heuristic assessment: evidence specificity (regex patterns), claim diversity (pairwise overlap), logical structure (forward references + causal connectors), confidence calibration (internal consistency), opening coherence (keyword alignment), actionability (testable assertions)
 - Produces letter grade (A/B/C/D) for quality gate enforcement
 - Wired into parallel_arguments_node immediately after prosecution/defense complete
 
