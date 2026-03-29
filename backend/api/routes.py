@@ -15,6 +15,7 @@ from fastapi.responses import JSONResponse, PlainTextResponse, Response
 from pydantic import BaseModel, field_validator
 
 from services.export_service import generate_markdown_report, generate_json_report, generate_pdf_report, generate_docx_report
+from utils.cache import TTLCache
 
 from config import settings
 from models.schemas import Decision, StreamEvent
@@ -32,6 +33,9 @@ SESSION_DIR.mkdir(parents=True, exist_ok=True)
 
 # In-memory session cache backed by JSON file persistence
 sessions: dict[str, dict] = {}
+
+# TTL cache for domain detection — avoids redundant LLM calls for similar questions
+_domain_cache = TTLCache(ttl_seconds=300, max_entries=200)
 
 
 def _persist_session(session_id: str, session: dict) -> None:
@@ -184,6 +188,14 @@ Respond with ONLY valid JSON:
   "reasoning": "string — one sentence explaining the classification"
 }"""
 
+    cache_key = request.question + (request.context or "")
+
+    # Check cache first to avoid redundant LLM calls
+    cached = _domain_cache.get(cache_key)
+    if cached:
+        logger.debug("Domain detection cache hit for: %s", request.question[:50])
+        return DetectDomainResponse(**cached)
+
     prompt = f"Decision: {request.question}"
     if request.context:
         prompt += f"\nContext: {request.context}"
@@ -202,12 +214,18 @@ Respond with ONLY valid JSON:
             cleaned = cleaned.strip()
 
         data = json.loads(cleaned)
-        return DetectDomainResponse(
-            domain=data.get("domain", "business"),
-            confidence=data.get("confidence", 0.8),
-            suggested_format=data.get("suggested_format", "executive"),
-            reasoning=data.get("reasoning", "General business decision"),
-        )
+        result = {
+            "domain": data.get("domain", "business"),
+            "confidence": data.get("confidence", 0.8),
+            "suggested_format": data.get("suggested_format", "executive"),
+            "reasoning": data.get("reasoning", "General business decision"),
+        }
+
+        # Cache successful detection
+        _domain_cache.set(cache_key, result)
+        logger.debug("Domain detection cached: %s -> %s", request.question[:50], result["domain"])
+
+        return DetectDomainResponse(**result)
     except Exception as e:
         logger.error("Domain detection failed: %s", e)
         return DetectDomainResponse(
