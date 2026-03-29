@@ -28,6 +28,7 @@ from langchain_core.messages import SystemMessage, HumanMessage
 from config import settings
 from models.schemas import Argument, WitnessReport, VerdictResult, StreamEvent
 from utils.resilience import retry_with_backoff
+from utils.llm_helpers import parse_llm_json, emit_thinking_phases, create_llm
 
 logger = logging.getLogger(__name__)
 
@@ -73,12 +74,7 @@ class JudgeAgent:
     """Manages cross-examination and delivers the final verdict."""
 
     def __init__(self) -> None:
-        self.llm = ChatGroq(
-            model="llama-3.3-70b-versatile",
-            temperature=0.4,
-            max_tokens=2048,
-            api_key=settings.groq_api_key,
-        )
+        self.llm = create_llm(temperature=0.4, max_tokens=2048)
 
     def analyze_argument_strength(
         self,
@@ -263,24 +259,18 @@ class JudgeAgent:
         ]
 
         try:
-            thinking_phases = [
-                "Reviewing prosecution's opening statement and claims...",
-                "Reviewing defense's opening statement and claims...",
-                "Comparing conflicting evidence from both sides...",
-                "Identifying the most contested factual claims...",
-                "Selecting claims for witness verification...",
-            ]
-
-            for phase in thinking_phases:
-                if stream_callback:
-                    await stream_callback(
-                        StreamEvent(
-                            event_type="judge_start",
-                            agent="judge",
-                            content=phase + "\n",
-                        )
-                    )
-                    await asyncio.sleep(0.3)
+            await emit_thinking_phases(
+                phases=[
+                    "Reviewing prosecution's opening statement and claims...",
+                    "Reviewing defense's opening statement and claims...",
+                    "Comparing conflicting evidence from both sides...",
+                    "Identifying the most contested factual claims...",
+                    "Selecting claims for witness verification...",
+                ],
+                agent_name="judge",
+                event_type="judge_start",
+                stream_callback=stream_callback,
+            )
 
             response = await retry_with_backoff(
                 self.llm.ainvoke, messages,
@@ -367,24 +357,19 @@ class JudgeAgent:
         ]
 
         try:
-            thinking_phases = [
-                "Weighing prosecution arguments against evidence...",
-                "Weighing defense arguments against evidence...",
-                "Reviewing witness verification reports...",
-                "Assessing overall weight of evidence...",
-                "Formulating final ruling...",
-            ]
-
-            for phase in thinking_phases:
-                if stream_callback:
-                    await stream_callback(
-                        StreamEvent(
-                            event_type="verdict_start",
-                            agent="judge",
-                            content=phase + "\n",
-                        )
-                    )
-                    await asyncio.sleep(0.4)
+            await emit_thinking_phases(
+                phases=[
+                    "Weighing prosecution arguments against evidence...",
+                    "Weighing defense arguments against evidence...",
+                    "Reviewing witness verification reports...",
+                    "Assessing overall weight of evidence...",
+                    "Formulating final ruling...",
+                ],
+                agent_name="judge",
+                event_type="verdict_start",
+                stream_callback=stream_callback,
+                delay=0.4,
+            )
 
             response = await retry_with_backoff(
                 self.llm.ainvoke, messages,
@@ -500,16 +485,5 @@ class JudgeAgent:
         }
 
     def _parse_json(self, response: str) -> dict:
-        """Parse JSON from LLM response, handling markdown fences."""
-        cleaned = response.strip()
-        if cleaned.startswith("```"):
-            cleaned = cleaned.split("\n", 1)[1] if "\n" in cleaned else cleaned[3:]
-            if cleaned.endswith("```"):
-                cleaned = cleaned[:-3]
-            cleaned = cleaned.strip()
-
-        try:
-            return json.loads(cleaned)
-        except json.JSONDecodeError:
-            logger.warning("Failed to parse judge JSON response")
-            return {}
+        """Parse JSON from LLM response — delegates to shared utility."""
+        return parse_llm_json(response, fallback={}, operation_name="Judge")
