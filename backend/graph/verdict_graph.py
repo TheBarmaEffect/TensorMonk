@@ -40,6 +40,7 @@ from models.schemas import StreamEvent
 from config.domain_config import get_constitutional_overlay, get_evidence_hierarchy
 from utils.event_bus import pipeline_event_bus, PipelineEvent, EventPriority
 from utils.metrics import pipeline_metrics
+from utils.confidence_calibration import calibration_tracker
 
 
 def strip_authorship(research_package: dict) -> dict:
@@ -365,6 +366,53 @@ async def witness_node(state: VerdictState) -> dict:
             return {"witness_reports": [], "errors": [f"Witnesses: {str(e)}"]}
 
 
+def _calibrate_from_witnesses(
+    pro_arg,
+    def_arg,
+    witness_reports: list,
+    domain: str,
+) -> None:
+    """Use witness verdicts as ground truth to calibrate agent confidence.
+
+    When a witness sustains a claim, the originating agent's confidence for
+    that claim is recorded as "correct". When overruled, it's "incorrect".
+    This builds per-agent, per-domain calibration curves over time — enabling
+    detection of systematically overconfident or underconfident agents.
+    """
+    pro_claim_ids = {c.id: c.confidence for c in pro_arg.claims}
+    def_claim_ids = {c.id: c.confidence for c in def_arg.claims}
+
+    for w in witness_reports:
+        claim_id = w.claim_id
+        verdict = w.verdict_on_claim
+
+        if verdict == "inconclusive":
+            continue  # Skip — no ground truth
+
+        was_correct = verdict == "sustained"
+
+        if claim_id in pro_claim_ids:
+            calibration_tracker.record(
+                agent_name="prosecutor",
+                domain=domain,
+                confidence=pro_claim_ids[claim_id],
+                was_correct=was_correct,
+            )
+        elif claim_id in def_claim_ids:
+            calibration_tracker.record(
+                agent_name="defense",
+                domain=domain,
+                confidence=def_claim_ids[claim_id],
+                was_correct=was_correct,
+            )
+
+    logger.info(
+        "Calibration update — prosecutor ECE: %.4f, defense ECE: %.4f",
+        (calibration_tracker.get_agent_calibration("prosecutor") or type("", (), {"expected_calibration_error": 0})).expected_calibration_error,
+        (calibration_tracker.get_agent_calibration("defense") or type("", (), {"expected_calibration_error": 0})).expected_calibration_error,
+    )
+
+
 async def _run_verdict(state: VerdictState, use_low_temp: bool = False) -> dict:
     """Core verdict logic shared by all verdict node variants."""
     from models.schemas import Argument, WitnessReport
@@ -388,6 +436,9 @@ async def _run_verdict(state: VerdictState, use_low_temp: bool = False) -> dict:
     if use_low_temp:
         logger.info("Hallucination guard active: overriding judge temperature to 0.3")
         judge.llm.temperature = 0.3
+
+    # Calibrate agent confidence against witness ground truth
+    _calibrate_from_witnesses(pro_arg, def_arg, reports, state.get("domain", "business"))
 
     verdict_path = "low_temp" if use_low_temp else "normal"
     with pipeline_metrics.track("verdict"):
