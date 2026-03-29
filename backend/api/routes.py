@@ -15,6 +15,7 @@ from fastapi.responses import JSONResponse, PlainTextResponse, Response
 from pydantic import BaseModel, field_validator
 
 from services.export_service import generate_markdown_report, generate_json_report, generate_pdf_report, generate_docx_report
+from services.graph_visualizer import generate_pipeline_graph
 from utils.cache import TTLCache
 
 from config import settings
@@ -661,6 +662,40 @@ async def get_shared_verdict(share_token: str):
             continue
 
     raise HTTPException(status_code=404, detail="Shared verdict not found")
+
+
+# ---------------------------------------------------------------------------
+# Pipeline graph visualization endpoint
+# ---------------------------------------------------------------------------
+
+
+@router.get("/{session_id}/graph")
+async def get_pipeline_graph(session_id: str):
+    """Get the pipeline graph visualization for a verdict session.
+
+    Returns the graph topology with node states, edges, and metadata.
+    If the session has completed, includes execution data such as which
+    verdict routing path was taken and witness spawn decisions.
+    """
+    session = _get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    result = session.get("result")
+    graph = generate_pipeline_graph(session_result=result)
+    graph["session_id"] = session_id
+    graph["session_status"] = session.get("status", "unknown")
+    return graph
+
+
+@router.get("/graph/topology")
+async def get_graph_topology():
+    """Get the static pipeline topology (no session data).
+
+    Returns the base graph structure showing all possible nodes and edges,
+    useful for rendering a pipeline diagram before any session starts.
+    """
+    return generate_pipeline_graph(session_result=None)
 
 
 # ---------------------------------------------------------------------------
