@@ -101,12 +101,26 @@ async def health():
 
     return {
         "status": "alive",
-        "version": "1.0.0",
+        "version": "1.4.0",
         "health": "healthy" if critical_ok else "degraded",
         "uptime_seconds": uptime_seconds,
         "checks": checks,
         "metrics": pipeline_metrics.summary(),
+        "calibration": _get_calibration_summary(),
     }
+
+
+def _get_calibration_summary() -> dict:
+    """Get calibration status for health endpoint."""
+    try:
+        from utils.confidence_calibration import calibration_tracker
+        summary = calibration_tracker.summary()
+        return {
+            "agents_tracked": len(summary.get("agents", {})),
+            "recalibration_needed": summary.get("recalibration_needed", []),
+        }
+    except Exception:
+        return {"agents_tracked": 0, "recalibration_needed": []}
 
 
 @app.get("/metrics")
