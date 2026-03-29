@@ -363,3 +363,69 @@ class TestConstitutionalCompliance:
         }
         result = _validate_constitutional_compliance(data, "defense")
         assert result["compliant"] is True
+
+
+class TestPlattCalibrationWiring:
+    """Verify Platt scaling is fitted and applied during the pipeline."""
+
+    def test_platt_fitted_after_sufficient_data(self):
+        """After 10+ calibration records, Platt scaling should be fitted."""
+        from utils.confidence_calibration import calibration_tracker as ct
+        ct._agents.clear()
+        ct._domain_agents.clear()
+
+        pro = Argument(
+            opening="Strong case for",
+            claims=[
+                Claim(id=f"p{i}", statement=f"Claim {i}", evidence="ev", confidence=0.8)
+                for i in range(4)
+            ],
+            confidence=0.8,
+            agent="prosecutor",
+        )
+        defense = Argument(
+            opening="Counter argument",
+            claims=[
+                Claim(id=f"d{i}", statement=f"Counter {i}", evidence="ev", confidence=0.7)
+                for i in range(4)
+            ],
+            confidence=0.7,
+            agent="defense",
+        )
+
+        # Simulate 12 witness calibration records for prosecutor
+        for i in range(12):
+            witnesses = [
+                WitnessReport(
+                    claim_id=f"p{i % 4}",
+                    witness_type="fact",
+                    finding="test finding",
+                    resolution="test resolution",
+                    confidence=0.8,
+                    verdict_on_claim="sustained" if i % 3 != 0 else "overruled",
+                )
+            ]
+            _calibrate_from_witnesses(pro, defense, witnesses, "business")
+
+        cal = ct.get_agent_calibration("prosecutor")
+        assert cal is not None
+        assert cal._total_predictions >= 10
+        # Platt should have been fitted
+        assert hasattr(cal, "_platt_a")
+
+    def test_calibrate_confidence_returns_adjusted_value(self):
+        """calibrate_confidence should return a different value after fitting."""
+        from utils.confidence_calibration import AgentCalibration
+
+        cal = AgentCalibration("test")
+        # Record overconfident pattern: says 0.9, correct 50%
+        for _ in range(10):
+            cal.record(0.9, True)
+        for _ in range(10):
+            cal.record(0.9, False)
+        cal.fit_platt_scaling()
+
+        calibrated = cal.calibrate_confidence(0.9)
+        # Should be pulled toward 0.5 (actual accuracy)
+        assert calibrated != 0.9
+        assert 0.0 <= calibrated <= 1.0
