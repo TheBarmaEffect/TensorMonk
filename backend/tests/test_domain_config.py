@@ -20,10 +20,17 @@ class TestDomainConfig:
         assert isinstance(domains, dict)
 
     def test_has_expected_domains(self, domains):
-        expected = {"business", "financial", "legal", "medical", "technology", "hiring"}
+        expected = {"business", "financial", "legal", "medical", "technology", "hiring", "strategic", "product", "marketing"}
         domain_keys = set(domains.keys())
         for domain in expected:
             assert domain in domain_keys, f"Missing domain: {domain}"
+        assert len(domain_keys) == 9
+
+    def test_list_domains_returns_all(self):
+        from config.domain_config import list_domains
+        domains = list_domains()
+        assert len(domains) == 9
+        assert domains == sorted(domains)  # Alphabetically sorted
 
     def test_each_domain_has_constitutional_overlay(self, domains):
         for name, config in domains.items():
