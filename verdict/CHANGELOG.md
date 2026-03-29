@@ -82,7 +82,7 @@ All notable changes to the Verdict project.
 ### Added — Analytical Pipeline
 - **Argument Dependency Graph** (`utils/argument_graph.py`): DAG construction via keyword co-occurrence, BFS cascading impact analysis, coherence scoring (connected component ratio), foundation/critical/vulnerable claim detection
 - **Verdict Stability Analysis** (`utils/verdict_stability.py`): Monte Carlo perturbation testing (50 simulations, ±10% witness confidence), evidence margin computation, combined robustness scoring
-- **Argument Quality Scoring** (`utils/argument_quality.py`): 5-dimension heuristic assessment (evidence specificity, claim diversity, confidence calibration, opening coherence, actionability) with A-D letter grading
+- **Argument Quality Scoring** (`utils/argument_quality.py`): 6-dimension heuristic assessment (evidence specificity, claim diversity, logical structure, confidence calibration, opening coherence, actionability) with A-D letter grading
 - **Analysis API Endpoint**: `GET /api/verdict/{id}/analysis` — returns quality grades, dependency graphs, and stability analysis for completed sessions
 
 ### Refactored — Code Quality (DRY)
