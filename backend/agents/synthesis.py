@@ -26,6 +26,7 @@ from langchain_core.messages import SystemMessage, HumanMessage
 from config.domain_config import get_synthesis_anchors, get_suggested_format
 from utils.resilience import retry_with_backoff
 from utils.llm_helpers import parse_llm_json, emit_thinking_phases, create_llm, retry_with_low_temperature
+from utils.argument_quality import score_argument_quality
 from models.schemas import (
     Argument,
     WitnessReport,
@@ -106,6 +107,10 @@ class SynthesisAgent:
         pro_claims = [{"statement": c.statement, "evidence": c.evidence} for c in prosecutor_argument.claims]
         def_claims = [{"statement": c.statement, "evidence": c.evidence} for c in defense_argument.claims]
 
+        # Score argument quality to inform synthesis priorities
+        pro_quality = score_argument_quality(prosecutor_argument.model_dump(mode="json"))
+        def_quality = score_argument_quality(defense_argument.model_dump(mode="json"))
+
         # Few-shot synthesis anchors — domain-specific action examples loaded
         # from YAML config at runtime to ground recommended_actions in reality
         anchors = get_synthesis_anchors(domain)
@@ -118,6 +123,17 @@ class SynthesisAgent:
                 "Produce similarly concrete, time-bound steps."
             )
 
+        # Build quality-aware priority guidance
+        quality_guidance = ""
+        if pro_quality["grade"] != def_quality["grade"]:
+            stronger = "prosecution" if pro_quality["overall"] > def_quality["overall"] else "defense"
+            quality_guidance = (
+                f"\n\nARGUMENT QUALITY ASSESSMENT:\n"
+                f"  Prosecution: Grade {pro_quality['grade']} (score {pro_quality['overall']:.2f})\n"
+                f"  Defense: Grade {def_quality['grade']} (score {def_quality['overall']:.2f})\n"
+                f"  The {stronger}'s arguments were stronger — weight your synthesis accordingly.\n"
+            )
+
         prompt = (
             f"ORIGINAL DECISION: {decision_question}\n\n"
             f"RESEARCH SUMMARY: {research_package.get('summary', '')}\n\n"
@@ -128,7 +144,8 @@ class SynthesisAgent:
             f"WITNESS FINDINGS:\n{json.dumps(witness_data, indent=2)}\n\n"
             f"JUDGE VERDICT: {verdict.ruling.upper()}\n"
             f"REASONING: {verdict.reasoning}\n"
-            f"KEY FACTORS: {', '.join(verdict.key_factors)}\n\n"
+            f"KEY FACTORS: {', '.join(verdict.key_factors)}\n"
+            f"{quality_guidance}\n"
             f"Output format: {output_format} — tailor your synthesis to this audience.\n"
             f"{anchor_block}\n\n"
             "Now produce a STRONGER, battle-tested version of the original idea "
