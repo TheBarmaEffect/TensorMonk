@@ -66,15 +66,17 @@ User Input (question + context + output_format)
 - **Constitutional Directives**: Prosecutor MUST argue FOR, Defense MUST argue AGAINST, regardless of personal assessment. Enforced via system prompts.
 - **Adversarial Isolation**: Prosecutor and defense run in parallel and never see each other's output. The judge is the first node to receive both.
 - **Hallucination Guard**: Agent outputs are validated against Pydantic schemas. Malformed JSON triggers a retry with `temperature=0.3` for deterministic recovery.
-- **Checkpointing**: LangGraph MemorySaver persists state at each node. Production swap: `RedisSaver.from_conn_string()`.
-- **Human-in-the-Loop**: `interrupt_before=['verdict']` pauses the graph after witness reports, allowing review before the final ruling.
+- **Checkpointing**: LangGraph `AsyncRedisSaver` for production fault tolerance (falls back to `MemorySaver` when `REDIS_URL` is unset). State persisted at every node for resume/replay.
+- **Human-in-the-Loop**: `interrupt_before=['verdict']` pauses the graph when average witness confidence < 0.6, allowing human review before the final ruling.
+- **Dynamic Witness Spawning**: Conditional edges route through `_should_spawn_witnesses` — the Judge's cross-examination determines which claims are contested and what witness type to spawn for each. If no claims are contested, witnesses are skipped entirely.
+- **Domain-Aware Constitutional Overlays**: Loaded from `backend/config/domains.yaml` at runtime — each domain defines argumentation constraints, evidence hierarchy, and few-shot synthesis anchors.
 
 ## Tech Stack
 
 | Layer | Technology |
 |-------|------------|
 | Backend framework | FastAPI |
-| Agent orchestration | LangGraph (StateGraph + MemorySaver checkpointer) |
+| Agent orchestration | LangGraph (StateGraph + AsyncRedisSaver / MemorySaver) |
 | LLM inference | Groq (Llama 3.3 70B Versatile) |
 | Data models | Pydantic v2 with field validators |
 | Real-time streaming | WebSocket (native FastAPI) |
@@ -213,6 +215,7 @@ Connect to `ws://localhost:8000/api/verdict/{session_id}/stream` to receive real
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
 | `GROQ_API_KEY` | Yes | — | Groq API key for LLM inference |
+| `REDIS_URL` | No | — | Redis connection string for production checkpointing (`redis://host:6379/0`) |
 | `LOG_LEVEL` | No | `INFO` | Python logging level |
 
 ---

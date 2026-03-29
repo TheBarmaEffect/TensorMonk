@@ -1,7 +1,9 @@
-"""Verdict backend configuration."""
+"""Verdict backend configuration package.
+
+Exports the Settings singleton and domain-aware configuration utilities.
+"""
 
 from pydantic_settings import BaseSettings
-import os
 
 
 class Settings(BaseSettings):

@@ -12,6 +12,7 @@ from langchain_groq import ChatGroq
 from langchain_core.messages import SystemMessage, HumanMessage
 
 from config import settings
+from config.domain_config import get_constitutional_overlay, get_evidence_hierarchy
 from models.schemas import Argument, Claim, StreamEvent
 
 logger = logging.getLogger(__name__)
@@ -88,18 +89,13 @@ class DefenseAgent:
             "investor": "Highlight burn rate concerns, market saturation, competitive threats, and downside scenarios.",
         }.get(output_format, "")
 
-        # Domain-aware constitutional overlay — adapts counter-argumentation per domain
-        domain_overlay = {
-            "business": "Cite market failure rates, competitor responses, and operational risks.",
-            "financial": "Reference historical down-rounds, capital destruction scenarios, and dilution impacts.",
-            "legal": "Ground objections in adverse rulings, regulatory enforcement actions, and liability precedents.",
-            "medical": "Reference failed clinical trials, adverse event data, and regulatory rejection history.",
-            "hiring": "Focus on mis-hire cost data, retention risks, and organizational dysfunction patterns.",
-            "technology": "Cite migration failures, technical debt accumulation rates, and vendor lock-in risks.",
-            "strategic": "Reference failed acquisitions, integration disasters, and value destruction precedents.",
-            "product": "Cite product failure rates, pivot frequency data, and market timing risks.",
-            "marketing": "Reference campaign failure modes, brand damage cases, and channel saturation data.",
-        }.get(domain, "")
+        # Domain-aware constitutional overlay — loaded from YAML config at runtime.
+        # Each domain defines argumentation constraints, evidence hierarchy, and
+        # synthesis anchors in backend/config/domains.yaml.
+        domain_overlay = get_constitutional_overlay(domain)
+        evidence_types = get_evidence_hierarchy(domain)
+        if evidence_types:
+            domain_overlay += f"\nChallenge evidence in this order of authority: {', '.join(evidence_types)}."
 
         prompt = (
             f"Decision: {decision_question}\n"
