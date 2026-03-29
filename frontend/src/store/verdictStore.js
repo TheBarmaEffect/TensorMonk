@@ -80,4 +80,9 @@ const useVerdictStore = create((set, get) => ({
     }),
 }))
 
+// Expose store for debugging
+if (typeof window !== 'undefined') {
+  window.__verdictStore = useVerdictStore
+}
+
 export default useVerdictStore
