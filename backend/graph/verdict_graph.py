@@ -113,12 +113,14 @@ async def prosecutor_node(state: VerdictState) -> dict:
     research = strip_authorship(state.get("research_package", {}))
     callback = state.get("stream_callback")
     output_format = state.get("output_format", "executive")
+    domain = state.get("domain", "business")
 
     try:
         argument = await agent.run(
             decision_question=decision["question"],
             research_package=research,
             output_format=output_format,
+            domain=domain,
             stream_callback=callback,
         )
         return {"prosecutor_argument": argument.model_dump(mode="json")}
@@ -132,19 +134,21 @@ async def defense_node(state: VerdictState) -> dict:
 
     Constitutional directive: Must argue AGAINST regardless of personal assessment.
     Adversarial isolation: Receives only research_package (with authorship stripped),
-    never prosecutor output.
+    never prosecutor output. Domain-aware constitutional overlay applied.
     """
     agent = DefenseAgent()
     decision = state["decision"]
     research = strip_authorship(state.get("research_package", {}))
     callback = state.get("stream_callback")
     output_format = state.get("output_format", "executive")
+    domain = state.get("domain", "business")
 
     try:
         argument = await agent.run(
             decision_question=decision["question"],
             research_package=research,
             output_format=output_format,
+            domain=domain,
             stream_callback=callback,
         )
         return {"defense_argument": argument.model_dump(mode="json")}

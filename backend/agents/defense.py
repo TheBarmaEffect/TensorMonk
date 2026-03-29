@@ -66,6 +66,7 @@ class DefenseAgent:
         decision_question: str,
         research_package: dict,
         output_format: str = "executive",
+        domain: str = "business",
         stream_callback: Optional[Callable] = None,
     ) -> Argument:
         """Build the defense's case.
@@ -74,6 +75,7 @@ class DefenseAgent:
             decision_question: The decision being evaluated.
             research_package: Anonymous neutral research (author unknown to this agent).
             output_format: Style of argument (executive/technical/legal/investor).
+            domain: Decision domain for constitutional overlay (business, legal, medical, etc.).
             stream_callback: Async callback to emit StreamEvents.
 
         Returns:
@@ -86,10 +88,25 @@ class DefenseAgent:
             "investor": "Highlight burn rate concerns, market saturation, competitive threats, and downside scenarios.",
         }.get(output_format, "")
 
+        # Domain-aware constitutional overlay — adapts counter-argumentation per domain
+        domain_overlay = {
+            "business": "Cite market failure rates, competitor responses, and operational risks.",
+            "financial": "Reference historical down-rounds, capital destruction scenarios, and dilution impacts.",
+            "legal": "Ground objections in adverse rulings, regulatory enforcement actions, and liability precedents.",
+            "medical": "Reference failed clinical trials, adverse event data, and regulatory rejection history.",
+            "hiring": "Focus on mis-hire cost data, retention risks, and organizational dysfunction patterns.",
+            "technology": "Cite migration failures, technical debt accumulation rates, and vendor lock-in risks.",
+            "strategic": "Reference failed acquisitions, integration disasters, and value destruction precedents.",
+            "product": "Cite product failure rates, pivot frequency data, and market timing risks.",
+            "marketing": "Reference campaign failure modes, brand damage cases, and channel saturation data.",
+        }.get(domain, "")
+
         prompt = (
-            f"Decision: {decision_question}\n\n"
+            f"Decision: {decision_question}\n"
+            f"Domain: {domain}\n\n"
             f"Research Briefing (anonymous source):\n{json.dumps(research_package, indent=2)}\n\n"
-            f"{format_guidance}\n\n"
+            f"{format_guidance}\n"
+            f"{domain_overlay}\n\n"
             "Build your case AGAINST this decision. Be devastating, specific, and unflinching."
         )
 

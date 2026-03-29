@@ -66,6 +66,7 @@ class ProsecutorAgent:
         decision_question: str,
         research_package: dict,
         output_format: str = "executive",
+        domain: str = "business",
         stream_callback: Optional[Callable] = None,
     ) -> Argument:
         """Build the prosecution's case.
@@ -74,6 +75,7 @@ class ProsecutorAgent:
             decision_question: The decision being evaluated.
             research_package: Anonymous neutral research (author unknown to this agent).
             output_format: Style of argument (executive/technical/legal/investor).
+            domain: Decision domain for constitutional overlay (business, legal, medical, etc.).
             stream_callback: Async callback to emit StreamEvents.
 
         Returns:
@@ -86,10 +88,25 @@ class ProsecutorAgent:
             "investor": "Highlight ROI potential, market size, growth trajectory, and competitive moat.",
         }.get(output_format, "")
 
+        # Domain-aware constitutional overlay — adapts argumentation constraints per domain
+        domain_overlay = {
+            "business": "Cite market data, revenue projections, and competitive benchmarks.",
+            "financial": "Reference financial models, valuation multiples, and capital efficiency metrics.",
+            "legal": "Ground arguments in statutory authority, case law, and regulatory frameworks.",
+            "medical": "Reference clinical evidence, FDA guidance, and patient outcome data.",
+            "hiring": "Focus on talent market data, compensation benchmarks, and org-design patterns.",
+            "technology": "Cite architecture precedents, scalability benchmarks, and migration success rates.",
+            "strategic": "Reference M&A precedents, synergy analyses, and integration frameworks.",
+            "product": "Cite user research, PMF signals, and comparable product launches.",
+            "marketing": "Reference CAC/LTV benchmarks, channel performance data, and brand studies.",
+        }.get(domain, "")
+
         prompt = (
-            f"Decision: {decision_question}\n\n"
+            f"Decision: {decision_question}\n"
+            f"Domain: {domain}\n\n"
             f"Research Briefing (anonymous source):\n{json.dumps(research_package, indent=2)}\n\n"
-            f"{format_guidance}\n\n"
+            f"{format_guidance}\n"
+            f"{domain_overlay}\n\n"
             "Build your case FOR this decision. Be aggressive, specific, and compelling."
         )
 
