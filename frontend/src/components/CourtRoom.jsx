@@ -445,7 +445,7 @@ export default function CourtRoom() {
                   initial={{ opacity: 0, y: 30 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 1, delay: 1.2, ease: [0.16, 1, 0.3, 1] }}
-                  className="max-w-2xl mx-auto"
+                  className="max-w-2xl mx-auto glass-card-elevated rounded-2xl p-6"
                 >
                   <VerdictCard verdict={verdict} />
                 </motion.div>
@@ -460,7 +460,7 @@ export default function CourtRoom() {
                   initial={{ opacity: 0, y: 30 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 1, delay: 0.6, ease: [0.16, 1, 0.3, 1] }}
-                  className="max-w-2xl mx-auto"
+                  className="max-w-2xl mx-auto glass-card rounded-2xl p-6"
                 >
                   <SynthesisCard synthesis={synthesis} />
                 </motion.div>
