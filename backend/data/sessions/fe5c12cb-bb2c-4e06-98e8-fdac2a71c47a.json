@@ -1,1 +1,0 @@
-{"id": "fe5c12cb-bb2c-4e06-98e8-fdac2a71c47a", "decision": {"id": "fe5c12cb-bb2c-4e06-98e8-fdac2a71c47a", "question": "Should we invest in building a new data pipeline?", "context": null, "created_at": "2026-03-29T17:21:38.761553"}, "output_format": "executive", "domain": "financial", "status": "created", "events": [], "result": null, "created_at": "2026-03-29T17:21:38.761567"}

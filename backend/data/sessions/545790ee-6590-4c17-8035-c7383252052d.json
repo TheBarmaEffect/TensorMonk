@@ -1,1 +1,0 @@
-{"id": "545790ee-6590-4c17-8035-c7383252052d", "decision": {"id": "545790ee-6590-4c17-8035-c7383252052d", "question": "Should we switch from REST to GraphQL for our API?", "context": null, "created_at": "2026-03-29T16:07:40.325379"}, "output_format": "executive", "domain": "technology", "status": "created", "events": [], "result": null, "created_at": "2026-03-29T16:07:40.325395"}
