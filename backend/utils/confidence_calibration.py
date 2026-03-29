@@ -381,6 +381,46 @@ class CalibrationTracker:
         """Get calibration data for a specific agent."""
         return self._agents.get(agent_name)
 
+    def auto_fit_all(self, min_samples: int = 10) -> dict[str, Any]:
+        """Auto-fit Platt scaling for all agents with sufficient data.
+
+        Iterates through all tracked agents and fits Platt scaling calibration
+        on any agent with at least min_samples predictions. Returns a summary
+        of which agents were fitted and their calibration quality.
+
+        Args:
+            min_samples: Minimum predictions required before fitting (default 10).
+
+        Returns:
+            Dict mapping agent names to their fit results.
+        """
+        results = {}
+        for name, cal in self._agents.items():
+            if cal._total_predictions >= min_samples:
+                fit_result = cal.fit_platt_scaling()
+                results[name] = fit_result
+                logger.info(
+                    "Auto-fit Platt scaling for %s: %s (ECE=%.4f)",
+                    name, "success" if fit_result.get("fitted") else "skipped",
+                    cal.expected_calibration_error,
+                )
+        return results
+
+    def needs_recalibration(self, agent_name: str, ece_threshold: float = 0.08) -> bool:
+        """Check if an agent's calibration has drifted beyond acceptable ECE.
+
+        Args:
+            agent_name: Agent to check.
+            ece_threshold: ECE above this triggers recalibration (default 0.08).
+
+        Returns:
+            True if recalibration is recommended.
+        """
+        cal = self._agents.get(agent_name)
+        if cal is None or cal._total_predictions < 10:
+            return False
+        return cal.expected_calibration_error > ece_threshold
+
     def summary(self) -> dict[str, Any]:
         """Full calibration summary across all agents and domains."""
         return {
@@ -393,6 +433,10 @@ class CalibrationTracker:
                 }
                 for domain, agents in self._domain_agents.items()
             },
+            "recalibration_needed": [
+                name for name in self._agents
+                if self.needs_recalibration(name)
+            ],
         }
 
 
