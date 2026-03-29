@@ -140,6 +140,18 @@ class SynthesisAgent:
 
             data = self._parse_json(full_response)
 
+            # Hallucination guard: if parse failed, retry with low temperature
+            if not data.get("improved_idea") or len(data.get("improved_idea", "")) < 50:
+                logger.warning("Synthesis output malformed, retrying with temperature=0.3")
+                retry_llm = ChatGroq(
+                    model="llama-3.3-70b-versatile",
+                    temperature=0.3,
+                    max_tokens=3000,
+                    api_key=settings.groq_api_key,
+                )
+                retry_response = await retry_llm.ainvoke(messages)
+                data = self._parse_json(retry_response.content)
+
             synthesis = Synthesis(
                 decision_id=verdict.decision_id,
                 improved_idea=data.get("improved_idea", ""),

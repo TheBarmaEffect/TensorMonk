@@ -125,6 +125,18 @@ class DefenseAgent:
             response = await self.llm.ainvoke(messages)
             argument = self._parse_response(response.content)
 
+            # Hallucination guard: if parse produced fallback, retry with low temperature
+            if len(argument.claims) == 1 and argument.claims[0].statement == "Argument parsing failed":
+                logger.warning("Defense output malformed, retrying with temperature=0.3")
+                retry_llm = ChatGroq(
+                    model="llama-3.3-70b-versatile",
+                    temperature=0.3,
+                    max_tokens=2048,
+                    api_key=settings.groq_api_key,
+                )
+                retry_response = await retry_llm.ainvoke(messages)
+                argument = self._parse_response(retry_response.content)
+
             if stream_callback:
                 await stream_callback(
                     StreamEvent(
