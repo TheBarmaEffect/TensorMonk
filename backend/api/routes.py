@@ -588,6 +588,23 @@ async def stream_verdict(websocket: WebSocket, session_id: str):
                     "argument_graphs": graph_analysis,
                     "verdict_stability": stability,
                 }
+                # Record witness outcomes for calibration tracking
+                try:
+                    from utils.confidence_calibration import calibration_tracker
+                    domain = session.get("domain", "business")
+                    for w in witnesses:
+                        if isinstance(w, dict):
+                            agent_type = w.get("witness_type", "fact")
+                            conf = w.get("confidence", 0.5)
+                            # Treat sustained as correct, overruled as incorrect
+                            was_correct = w.get("verdict_on_claim") == "sustained"
+                            calibration_tracker.record(
+                                f"witness_{agent_type}", domain, conf, was_correct
+                            )
+                    # Auto-fit Platt scaling when sufficient data accumulates
+                    calibration_tracker.auto_fit_all(min_samples=10)
+                except Exception:
+                    pass  # Calibration is non-critical
             except Exception as analysis_err:
                 logger.warning("Analysis computation failed (non-fatal): %s", analysis_err)
                 session["result"]["analysis"] = None
