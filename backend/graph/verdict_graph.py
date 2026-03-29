@@ -44,6 +44,7 @@ from utils.confidence_calibration import calibration_tracker
 from utils.argument_graph import build_argument_graphs
 from utils.verdict_stability import full_stability_analysis
 from utils.argument_quality import score_argument_quality
+from utils.validators import validate_research_package
 
 
 def strip_authorship(research_package: dict) -> dict:
@@ -134,9 +135,18 @@ async def research_node(state: VerdictState) -> dict:
                 domain=domain,
                 stream_callback=callback,
             )
+            # Validate research completeness before passing to adversarial agents
+            is_complete, missing = validate_research_package(package)
+            if not is_complete:
+                logger.warning("Research package incomplete — missing: %s", missing)
+
             await pipeline_event_bus.publish(PipelineEvent(
                 topic="agent.research.complete", session_id=tid,
-                payload={"quality": package.get("_quality_scores", {}).get("overall", 0)},
+                payload={
+                    "quality": package.get("_quality_scores", {}).get("overall", 0),
+                    "is_complete": is_complete,
+                    "missing_fields": missing,
+                },
             ))
             return {"research_package": package}
         except Exception as e:

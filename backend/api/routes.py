@@ -21,6 +21,7 @@ from utils.cache import TTLCache
 from config import settings
 from models.schemas import Decision, StreamEvent
 from utils.llm_helpers import create_llm, parse_llm_json
+from utils.validators import validate_question_quality, check_format_domain_fit
 
 logger = logging.getLogger(__name__)
 
@@ -128,6 +129,7 @@ class StartResponse(BaseModel):
     status: str
     output_format: str
     domain: str
+    format_suggestion: Optional[str] = None
 
 
 class DetectDomainRequest(BaseModel):
@@ -247,10 +249,18 @@ async def start_verdict(request: StartRequest):
     Returns a session_id to connect via WebSocket for real-time streaming.
     Auto-detects domain from the question for context-aware analysis.
     """
+    # Validate question quality before starting expensive pipeline
+    is_quality, quality_error = validate_question_quality(request.question)
+    if not is_quality:
+        raise HTTPException(status_code=422, detail=quality_error)
+
     decision = Decision(question=request.question, context=request.context)
 
     # Quick domain classification (keyword heuristics, no LLM call)
     domain = _classify_domain_heuristic(request.question)
+
+    # Check format-domain compatibility (advisory, doesn't block)
+    is_fit, fit_suggestion = check_format_domain_fit(request.output_format, domain)
 
     session = {
         "id": decision.id,
@@ -276,6 +286,7 @@ async def start_verdict(request: StartRequest):
         status="created",
         output_format=request.output_format,
         domain=domain,
+        format_suggestion=fit_suggestion,
     )
 
 
