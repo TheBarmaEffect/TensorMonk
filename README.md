@@ -129,7 +129,8 @@ User Input (question + context + output_format)
 - Structured error hierarchy: VerdictError → AgentError/SessionError/ExportError with JSON serialization
 - Pipeline performance metrics: per-agent durations, success/failure counts, exposed via `/metrics` endpoint
 - Security middleware: XSS pattern detection, HTML entity sanitization, body size limits, security headers
-- Centralized prompt templates: all agent prompts in `agents/prompts.py` with constitutional directive auditing
+- Shared LLM utilities: `utils/llm_helpers.py` — all 6 agents use `parse_llm_json()`, `create_llm()`, `emit_thinking_phases()`, and `retry_with_low_temperature()` (eliminated ~160 lines of duplicated boilerplate)
+- Centralized prompt templates: format instructions shared via `agents/prompts.py` with constitutional directive auditing
 - Session analytics: aggregate ruling distribution, domain breakdown, format usage via `/sessions/analytics`
 - Pipeline graph visualization: structured topology generation with dynamic witness nodes and routing paths
 - Async event bus: topic-based pub/sub with fire-and-forget delivery for pipeline observability

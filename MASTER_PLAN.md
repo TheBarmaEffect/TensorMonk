@@ -162,6 +162,8 @@ All Tier 2 features were moved to functional status. The courtroom UI was never 
 4. **fpdf2 over WeasyPrint**: No system dependency on wkhtmltopdf; pure Python PDF generation
 5. **In-memory rate limiter over Redis**: No additional infrastructure dependency
 6. **JSON file persistence over SQLite**: Simpler deployment, human-readable session data
+7. **Shared LLM helpers over per-agent duplication**: `utils/llm_helpers.py` consolidates JSON parsing, LLM factory, thinking phases, and retry logic used by all 6 agents — single place to change LLM behavior
+8. **Heuristic quality scoring over LLM self-evaluation**: Argument quality, research quality, and synthesis coverage use fast deterministic heuristics instead of additional LLM calls — no latency overhead, predictable results
 
 ---
 
