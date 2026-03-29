@@ -162,3 +162,9 @@ class TestFSMCompleteness:
 
     def test_created_can_reach_running(self):
         assert SessionState.RUNNING in _VALID_TRANSITIONS[SessionState.CREATED]
+
+    def test_elapsed_in_current_state(self, session):
+        import time
+        time.sleep(0.01)
+        elapsed = session.elapsed_in_current_state
+        assert elapsed >= 0.01
