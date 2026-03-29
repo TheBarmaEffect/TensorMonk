@@ -167,7 +167,7 @@ def generate_pdf_report(session_data: dict) -> bytes:
     # Title — domain accent color
     pdf.set_font("Helvetica", style="B", size=20)
     pdf.set_text_color(*accent)
-    pdf.cell(0, 12, "VERDICT — AI Courtroom Analysis", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    pdf.cell(0, 12, "VERDICT - AI Courtroom Analysis", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
 
     # Domain subtitle
     pdf.set_font("Helvetica", style="I", size=11)
