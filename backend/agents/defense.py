@@ -16,6 +16,7 @@ from config import settings
 from config.domain_config import get_constitutional_overlay, get_evidence_hierarchy
 from models.schemas import Argument, Claim, StreamEvent
 from utils.resilience import retry_with_backoff
+from utils.llm_helpers import parse_llm_json, emit_thinking_phases, create_llm, retry_with_low_temperature
 
 logger = logging.getLogger(__name__)
 
@@ -57,12 +58,7 @@ class DefenseAgent:
     """
 
     def __init__(self) -> None:
-        self.llm = ChatGroq(
-            model="llama-3.3-70b-versatile",
-            temperature=0.7,
-            max_tokens=2048,
-            api_key=settings.groq_api_key,
-        )
+        self.llm = create_llm(temperature=0.7, max_tokens=2048)
 
     async def run(
         self,
@@ -114,27 +110,22 @@ class DefenseAgent:
         ]
 
         try:
-            thinking_phases = [
-                "Analyzing research briefing for potential weaknesses in this decision...",
-                "Identifying market risks and competitive threats...",
-                "Constructing counter-argument with evidence...",
-                "Building claim 1 — critical risk assessment...",
-                "Building claim 2 — market reality check...",
-                "Building claim 3 — alternative approach analysis...",
-                "Building claim 4 — worst-case scenario evaluation...",
-                "Finalizing defense case...",
-            ]
-
-            for phase in thinking_phases:
-                if stream_callback:
-                    await stream_callback(
-                        StreamEvent(
-                            event_type="defense_thinking",
-                            agent="defense",
-                            content=phase + "\n",
-                        )
-                    )
-                    await asyncio.sleep(0.4)
+            await emit_thinking_phases(
+                phases=[
+                    "Analyzing research briefing for potential weaknesses in this decision...",
+                    "Identifying market risks and competitive threats...",
+                    "Constructing counter-argument with evidence...",
+                    "Building claim 1 — critical risk assessment...",
+                    "Building claim 2 — market reality check...",
+                    "Building claim 3 — alternative approach analysis...",
+                    "Building claim 4 — worst-case scenario evaluation...",
+                    "Finalizing defense case...",
+                ],
+                agent_name="defense",
+                event_type="defense_thinking",
+                stream_callback=stream_callback,
+                delay=0.4,
+            )
 
             response = await retry_with_backoff(
                 self.llm.ainvoke, messages,
@@ -144,18 +135,13 @@ class DefenseAgent:
 
             # Hallucination guard: if parse produced fallback, retry with low temperature
             if len(argument.claims) == 1 and argument.claims[0].statement == "Argument parsing failed":
-                logger.warning("Defense output malformed, retrying with temperature=0.3")
-                retry_llm = ChatGroq(
-                    model="llama-3.3-70b-versatile",
-                    temperature=0.3,
+                argument = await retry_with_low_temperature(
+                    messages=messages,
+                    parse_fn=self._parse_response,
+                    quality_check_fn=lambda a: len(a.claims) > 1,
                     max_tokens=2048,
-                    api_key=settings.groq_api_key,
+                    operation_name="Defense",
                 )
-                retry_response = await retry_with_backoff(
-                    retry_llm.ainvoke, messages,
-                    max_retries=1, base_delay=0.5, operation_name="Defense LLM (low-temp retry)",
-                )
-                argument = self._parse_response(retry_response.content)
 
             if stream_callback:
                 await stream_callback(

@@ -21,6 +21,7 @@ from langchain_core.messages import SystemMessage, HumanMessage
 from config import settings
 from models.schemas import WitnessReport, StreamEvent
 from utils.resilience import retry_with_backoff
+from utils.llm_helpers import parse_llm_json, create_llm
 
 logger = logging.getLogger(__name__)
 
@@ -57,12 +58,7 @@ class WitnessAgent:
     """Factory that spawns specialist witnesses to verify claims."""
 
     def __init__(self) -> None:
-        self.llm = ChatGroq(
-            model="llama-3.3-70b-versatile",
-            temperature=0.3,
-            max_tokens=1024,
-            api_key=settings.groq_api_key,
-        )
+        self.llm = create_llm(temperature=0.3, max_tokens=1024)
 
     async def verify_claim(
         self,
@@ -166,16 +162,9 @@ class WitnessAgent:
             raise
 
     def _parse_json(self, response: str) -> dict:
-        """Parse JSON from LLM response."""
-        cleaned = response.strip()
-        if cleaned.startswith("```"):
-            cleaned = cleaned.split("\n", 1)[1] if "\n" in cleaned else cleaned[3:]
-            if cleaned.endswith("```"):
-                cleaned = cleaned[:-3]
-            cleaned = cleaned.strip()
-
-        try:
-            return json.loads(cleaned)
-        except json.JSONDecodeError:
-            logger.warning("Failed to parse witness JSON")
-            return {"resolution": cleaned[:500], "confidence": 0.5, "verdict_on_claim": "inconclusive"}
+        """Parse JSON from LLM response — delegates to shared utility."""
+        return parse_llm_json(
+            response,
+            fallback={"resolution": response.strip()[:500], "confidence": 0.5, "verdict_on_claim": "inconclusive"},
+            operation_name="Witness",
+        )
