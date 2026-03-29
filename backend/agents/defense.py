@@ -4,6 +4,7 @@ Constitutional role: Argue AGAINST the decision regardless of personal assessmen
 Adversarial isolation: Receives only the anonymous research package, never the prosecutor's output.
 """
 
+import asyncio
 import json
 import logging
 from typing import Callable, Optional
@@ -132,7 +133,6 @@ class DefenseAgent:
                             content=phase + "\n",
                         )
                     )
-                    import asyncio
                     await asyncio.sleep(0.4)
 
             response = await self.llm.ainvoke(messages)

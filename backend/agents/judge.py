@@ -1,5 +1,6 @@
 """Judge Agent — cross-examines arguments and delivers final verdict."""
 
+import asyncio
 import json
 import logging
 from typing import Callable, Optional
@@ -129,7 +130,6 @@ class JudgeAgent:
                             content=phase + "\n",
                         )
                     )
-                    import asyncio
                     await asyncio.sleep(0.3)
 
             response = await self.llm.ainvoke(messages)
@@ -221,7 +221,6 @@ class JudgeAgent:
                             content=phase + "\n",
                         )
                     )
-                    import asyncio
                     await asyncio.sleep(0.4)
 
             response = await self.llm.ainvoke(messages)

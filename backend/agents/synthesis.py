@@ -1,5 +1,6 @@
 """Synthesis Agent — produces an improved, battle-tested version of the original idea."""
 
+import asyncio
 import json
 import logging
 from typing import Callable, Optional
@@ -147,7 +148,6 @@ class SynthesisAgent:
                             content=phase + "\n",
                         )
                     )
-                    import asyncio
                     await asyncio.sleep(0.3)
 
             response = await self.llm.ainvoke(messages)
