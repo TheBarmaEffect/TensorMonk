@@ -141,12 +141,52 @@ async def research_node(state: VerdictState) -> dict:
             return {"research_package": {}, "errors": [f"Research: {str(e)}"]}
 
 
+def _adaptive_temperature(research_package: dict, base_temp: float = 0.7) -> float:
+    """Compute adaptive LLM temperature based on research quality.
+
+    When research grounding is strong (many web-sourced facts), we lower
+    the temperature so agents produce more factual, evidence-anchored arguments.
+    When research is sparse, we raise temperature slightly to encourage more
+    creative reasoning and broader exploration of the argument space.
+
+    This creates a feedback loop: better research → more grounded arguments →
+    higher quality pipeline output.
+
+    Args:
+        research_package: The research output (may contain _quality_scores).
+        base_temp: Default temperature when no quality data is available.
+
+    Returns:
+        Adjusted temperature between 0.4 and 0.85.
+    """
+    quality = research_package.get("_quality_scores", {})
+    if not quality:
+        return base_temp
+
+    overall = quality.get("overall", 0.5)
+    grounding = quality.get("grounding", 0.0)
+
+    # Higher quality research → lower temp (more factual)
+    # Lower quality research → higher temp (more creative exploration)
+    temp_adjustment = (0.5 - overall) * 0.3  # ±0.15 range
+    grounding_bonus = grounding * -0.1       # Up to -0.1 for fully grounded
+
+    adjusted = base_temp + temp_adjustment + grounding_bonus
+    clamped = max(0.4, min(0.85, adjusted))
+
+    logger.info(
+        "Adaptive temperature: %.2f (base=%.2f, quality=%.2f, grounding=%.2f)",
+        clamped, base_temp, overall, grounding,
+    )
+    return round(clamped, 2)
+
+
 async def prosecutor_node(state: VerdictState) -> dict:
     """Run the Prosecutor agent — argues FOR the decision.
 
     Constitutional directive: Must argue FOR regardless of personal assessment.
     Adversarial isolation: Receives only research_package (with authorship stripped),
-    never defense output.
+    never defense output. Temperature is adaptively set based on research quality.
     """
     agent = ProsecutorAgent()
     decision = state["decision"]
@@ -155,6 +195,9 @@ async def prosecutor_node(state: VerdictState) -> dict:
     output_format = state.get("output_format", "executive")
     domain = state.get("domain", "business")
     tid = state.get("thread_id", "")
+
+    # Adaptive temperature: adjust based on research quality
+    agent.llm.temperature = _adaptive_temperature(state.get("research_package", {}))
 
     with pipeline_metrics.track("prosecutor"):
         try:
@@ -196,6 +239,9 @@ async def defense_node(state: VerdictState) -> dict:
     output_format = state.get("output_format", "executive")
     domain = state.get("domain", "business")
     tid = state.get("thread_id", "")
+
+    # Adaptive temperature: adjust based on research quality
+    agent.llm.temperature = _adaptive_temperature(state.get("research_package", {}))
 
     with pipeline_metrics.track("defense"):
         try:
