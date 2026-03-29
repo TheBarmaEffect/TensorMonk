@@ -31,7 +31,7 @@ Build a **multi-agent adversarial AI courtroom** that takes any decision or idea
 - Argument dependency graph: DAG construction with cascading impact analysis
 - Verdict stability: Monte Carlo perturbation testing (50 runs, ±10%)
 - Argument quality scoring: 5-dimension heuristic assessment with A-D grading
-- Confidence calibration: Bayesian ECE tracking per agent per domain
+- Confidence calibration: binned ECE + Platt scaling + isotonic regression (PAVA) per agent per domain
 
 ### 6. Intelligence-Driven Routing (ADR-006)
 - Computed intelligence (quality scores, graph analysis, stability) flows through VerdictState — not just emitted as telemetry
@@ -93,7 +93,7 @@ Build a **multi-agent adversarial AI courtroom** that takes any decision or idea
 | Keyboard shortcuts | ✅ | `useKeyboardShortcuts.js` with 6 shortcuts |
 | ARIA accessibility | ✅ | roles, labels, described-by on LandingInput, MicButton, PipelineGraph |
 | Async event bus (Observer pattern) | ✅ | `utils/event_bus.py` with topic pub/sub |
-| Confidence calibration (ECE) | ✅ | `utils/confidence_calibration.py` per-agent tracking |
+| Confidence calibration (ECE + Platt + PAVA) | ✅ | `utils/confidence_calibration.py` — binned ECE, Platt scaling, isotonic regression |
 | Domain-aware input validators | ✅ | `utils/validators.py` — wired into API routes + research node |
 | Pipeline metrics + event bus wired into all graph nodes | ✅ | Every node emits start/complete/error events with rich payloads |
 | Adaptive temperature from research quality | ✅ | `_adaptive_temperature()` adjusts prosecutor/defense LLM temp |
