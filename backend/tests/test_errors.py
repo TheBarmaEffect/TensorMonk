@@ -9,6 +9,7 @@ from utils.errors import (
     SessionNotFoundError,
     SessionExpiredError,
     ExportError,
+    ERROR_CODES,
 )
 
 
@@ -95,3 +96,28 @@ class TestInheritanceHierarchy:
             d = err.to_dict()
             assert "error" in d
             assert "message" in d
+
+
+class TestErrorCodes:
+    def test_error_codes_dict_exists(self):
+        assert isinstance(ERROR_CODES, dict)
+        assert len(ERROR_CODES) >= 10
+
+    def test_all_codes_unique(self):
+        codes = list(ERROR_CODES.values())
+        assert len(codes) == len(set(codes))
+
+    def test_code_format(self):
+        for name, code in ERROR_CODES.items():
+            assert code.startswith("E"), f"{name} code should start with E"
+            assert len(code) == 5, f"{name} code should be 5 chars"
+
+    def test_to_dict_includes_code_when_set(self):
+        err = VerdictError("test", code="E1001")
+        d = err.to_dict()
+        assert d["code"] == "E1001"
+
+    def test_to_dict_omits_code_when_none(self):
+        err = VerdictError("test")
+        d = err.to_dict()
+        assert "code" not in d
