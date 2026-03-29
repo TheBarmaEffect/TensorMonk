@@ -90,6 +90,10 @@ class VerdictState(TypedDict):
     Adversarial isolation is maintained by the graph: prosecutor_node and
     defense_node receive only the research_package, never each other's output.
     The judge receives both arguments only after both are complete.
+
+    Intelligence pipeline: quality scores and structural analysis computed in
+    earlier nodes flow downstream to inform routing, witness prioritization,
+    and synthesis focus — not just emitted as telemetry.
     """
 
     decision: dict
@@ -98,10 +102,13 @@ class VerdictState(TypedDict):
     research_package: Optional[dict]
     prosecutor_argument: Optional[dict]
     defense_argument: Optional[dict]
+    argument_quality: Optional[dict]       # quality grades from parallel_arguments_node
+    argument_graphs: Optional[dict]        # structural DAG analysis from cross_exam_node
     contested_claims: Optional[list]
     witness_reports: Optional[list]
     cross_examination: Optional[dict]
     verdict: Optional[dict]
+    verdict_stability: Optional[dict]      # stability analysis from verdict node
     synthesis: Optional[dict]
     thread_id: str
     errors: Annotated[list, operator.add]
@@ -404,6 +411,15 @@ async def parallel_arguments_node(state: VerdictState) -> dict:
             priority=EventPriority.HIGH,
         ))
 
+    # Store quality scores in state — downstream nodes (cross-exam, witness,
+    # synthesis) use these to prioritize claims and weight arguments.
+    merged["argument_quality"] = {
+        "prosecutor": {"grade": pro_quality["grade"], "overall": pro_quality["overall"]},
+        "defense": {"grade": def_quality["grade"], "overall": def_quality["overall"]},
+        "quality_gap": round(abs(pro_quality["overall"] - def_quality["overall"]), 3),
+        "weaker_side": "defense" if pro_quality["overall"] > def_quality["overall"] else "prosecution",
+    }
+
     errors = pro_result.get("errors", []) + def_result.get("errors", [])
     if errors:
         merged["errors"] = errors
@@ -435,23 +451,40 @@ async def judge_cross_exam_node(state: VerdictState) -> dict:
                   for c in def_arg.claims]
     graph_analysis = build_argument_graphs(pro_claims, def_claims)
 
+    # Enrich cross-examination with structural intelligence from argument graphs.
+    # The judge can now prioritize claims with high cascading impact and target
+    # foundation claims whose overruling would collapse entire argument branches.
+    structural_guidance = ""
+    comparative = graph_analysis.get("comparative", {})
+    for side_key in ("prosecution", "defense"):
+        side_data = graph_analysis.get(side_key, {})
+        critical = side_data.get("critical_claims", [])
+        foundation = side_data.get("foundation_claims", [])
+        if critical:
+            structural_guidance += f"\n{side_key.title()} critical claims (high cascading impact): {critical}"
+        if foundation:
+            structural_guidance += f"\n{side_key.title()} foundation claims (base assumptions): {foundation}"
+    if comparative.get("coherence_differential"):
+        structural_guidance += f"\nCoherence differential: {comparative['coherence_differential']:.3f}"
+
     with pipeline_metrics.track("judge_cross_exam"):
         try:
             await pipeline_event_bus.publish(PipelineEvent(
                 topic="agent.judge.cross_exam.start", session_id=tid,
-                payload={"argument_graphs": graph_analysis.get("comparative", {})},
+                payload={"argument_graphs": comparative},
             ))
             contested = await judge.cross_examine(
                 decision_question=decision["question"],
                 prosecutor_argument=pro_arg,
                 defense_argument=def_arg,
                 stream_callback=callback,
+                structural_analysis=structural_guidance if structural_guidance else None,
             )
             await pipeline_event_bus.publish(PipelineEvent(
                 topic="agent.judge.cross_exam.complete", session_id=tid,
                 payload={"contested_count": len(contested)},
             ))
-            return {"contested_claims": contested}
+            return {"contested_claims": contested, "argument_graphs": graph_analysis}
         except Exception as e:
             logger.error("Judge cross-exam failed: %s", e)
             await pipeline_event_bus.publish(PipelineEvent(
@@ -462,7 +495,12 @@ async def judge_cross_exam_node(state: VerdictState) -> dict:
 
 
 async def witness_node(state: VerdictState) -> dict:
-    """Spawn witness agents in parallel to verify contested claims."""
+    """Spawn witness agents in parallel to verify contested claims.
+
+    Uses argument graph analysis (when available) to prioritize claims by
+    cascading impact — verifying a high-impact claim first produces more
+    valuable information for the verdict than verifying peripheral claims.
+    """
     witness_agent = WitnessAgent()
     contested = state.get("contested_claims", [])
     callback = _callback_registry.get(state.get("thread_id", ""))
@@ -501,6 +539,29 @@ async def witness_node(state: VerdictState) -> dict:
             claim_evidence=evidence,
             witness_type=witness_type,
             stream_callback=callback,
+        )
+
+    # Prioritize contested claims using argument graph analysis when available.
+    # Claims with higher cascading impact are verified first — overruling a
+    # foundation claim has more verdict impact than overruling a peripheral one.
+    graph_data = state.get("argument_graphs", {})
+    if graph_data and len(contested) > 1:
+        # Build claim_id → cascading_impact lookup from both sides
+        impact_map: dict[str, int] = {}
+        for side_key in ("prosecution", "defense"):
+            per_claim = graph_data.get(side_key, {}).get("per_claim", {})
+            for cid, metrics in per_claim.items():
+                impact_map[cid] = metrics.get("cascading_impact", 0)
+
+        # Sort contested by cascading impact (highest first), then original order
+        contested = sorted(
+            contested,
+            key=lambda c: impact_map.get(c.get("claim_id", ""), 0),
+            reverse=True,
+        )
+        logger.info(
+            "Witness prioritization: reordered %d claims by cascading impact",
+            len(contested),
         )
 
     with pipeline_metrics.track("witnesses"):
@@ -651,7 +712,17 @@ async def _run_verdict(state: VerdictState, use_low_temp: bool = False) -> dict:
                     "verdict_is_robust": stability["verdict_is_robust"],
                 },
             ))
-            return {"verdict": verdict.model_dump(mode="json")}
+            # Store stability in state — synthesis uses this to gauge how
+            # cautious its recommendations should be.
+            return {
+                "verdict": verdict.model_dump(mode="json"),
+                "verdict_stability": {
+                    "combined_robustness": stability["combined_robustness"],
+                    "verdict_is_robust": stability["verdict_is_robust"],
+                    "evidence_margin": stability.get("evidence_margin", {}).get("classification", "unknown"),
+                    "flip_rate": stability.get("perturbation_stability", {}).get("flip_count", 0),
+                },
+            }
         except Exception as e:
             logger.error("Judge verdict failed: %s", e)
             await pipeline_event_bus.publish(PipelineEvent(
@@ -730,6 +801,11 @@ async def synthesis_node(state: VerdictState) -> dict:
 
     tid = state.get("thread_id", "")
 
+    # Pass verdict stability and argument quality to synthesis so it can
+    # calibrate recommendation confidence and flag fragile verdicts.
+    stability_data = state.get("verdict_stability")
+    quality_data = state.get("argument_quality")
+
     with pipeline_metrics.track("synthesis"):
         try:
             await pipeline_event_bus.publish(PipelineEvent(
@@ -745,6 +821,8 @@ async def synthesis_node(state: VerdictState) -> dict:
                 output_format=output_format,
                 domain=domain,
                 stream_callback=callback,
+                verdict_stability=stability_data,
+                argument_quality=quality_data,
             )
             await pipeline_event_bus.publish(PipelineEvent(
                 topic="agent.synthesis.complete", session_id=tid,
@@ -1021,10 +1099,13 @@ async def run_verdict_graph(
         "research_package": None,
         "prosecutor_argument": None,
         "defense_argument": None,
+        "argument_quality": None,
+        "argument_graphs": None,
         "contested_claims": None,
         "witness_reports": None,
         "cross_examination": None,
         "verdict": None,
+        "verdict_stability": None,
         "synthesis": None,
         "thread_id": tid,
         "errors": [],

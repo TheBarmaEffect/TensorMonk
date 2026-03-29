@@ -170,17 +170,24 @@ class JudgeAgent:
         prosecutor_argument: Argument,
         defense_argument: Argument,
         stream_callback: Optional[Callable] = None,
+        structural_analysis: Optional[str] = None,
     ) -> list[dict]:
         """Identify the 3 most contested claims for witness verification.
 
         Performs argument strength analysis before LLM cross-examination
-        to help focus on the highest-impact contested claims.
+        to help focus on the highest-impact contested claims. When structural
+        analysis is provided (from argument dependency graphs), the judge
+        prioritizes claims with high cascading impact and foundation claims
+        whose overruling would collapse entire argument branches.
 
         Args:
             decision_question: The decision being evaluated.
             prosecutor_argument: The prosecution's structured argument.
             defense_argument: The defense's structured argument.
             stream_callback: Async callback for stream events.
+            structural_analysis: Optional structural intelligence from
+                argument dependency graph analysis (critical paths, foundation
+                claims, coherence differentials).
 
         Returns:
             List of contested claim dicts with witness_type.
@@ -213,12 +220,23 @@ class JudgeAgent:
             for c in defense_argument.claims
         ]
 
+        structural_block = ""
+        if structural_analysis:
+            structural_block = (
+                f"\n\nSTRUCTURAL ANALYSIS (from argument dependency graphs):\n"
+                f"{structural_analysis}\n"
+                "Prioritize critical claims (high cascading impact) and foundation "
+                "claims (base assumptions) — overruling these would collapse entire "
+                "argument branches.\n"
+            )
+
         prompt = (
             f"Decision: {decision_question}\n\n"
             f"PROSECUTION ARGUMENT:\nOpening: {prosecutor_argument.opening}\n"
             f"Claims: {json.dumps(pro_claims, indent=2)}\n\n"
             f"DEFENSE ARGUMENT:\nOpening: {defense_argument.opening}\n"
             f"Claims: {json.dumps(def_claims, indent=2)}\n\n"
+            f"{structural_block}"
             "Identify the 3 most contested claims across both arguments."
         )
 
