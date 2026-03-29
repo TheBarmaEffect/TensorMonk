@@ -16,6 +16,7 @@ from config import settings
 from config.domain_config import get_constitutional_overlay, get_evidence_hierarchy
 from models.schemas import Argument, Claim, StreamEvent
 from utils.resilience import retry_with_backoff
+from utils.llm_helpers import parse_llm_json, emit_thinking_phases, create_llm, retry_with_low_temperature
 
 logger = logging.getLogger(__name__)
 
@@ -57,12 +58,7 @@ class ProsecutorAgent:
     """
 
     def __init__(self) -> None:
-        self.llm = ChatGroq(
-            model="llama-3.3-70b-versatile",
-            temperature=0.7,
-            max_tokens=2048,
-            api_key=settings.groq_api_key,
-        )
+        self.llm = create_llm(temperature=0.7, max_tokens=2048)
 
     async def run(
         self,
@@ -114,26 +110,21 @@ class ProsecutorAgent:
         ]
 
         try:
-            thinking_phases = [
-                "Reviewing research briefing for supporting evidence...",
-                "Constructing opening argument in favor of this decision...",
-                "Building claim 1 with supporting evidence...",
-                "Building claim 2 with market validation...",
-                "Building claim 3 with precedent support...",
-                "Building claim 4 with risk mitigation analysis...",
-                "Finalizing prosecution case with confidence assessment...",
-            ]
-
-            for phase in thinking_phases:
-                if stream_callback:
-                    await stream_callback(
-                        StreamEvent(
-                            event_type="prosecutor_thinking",
-                            agent="prosecutor",
-                            content=phase + "\n",
-                        )
-                    )
-                    await asyncio.sleep(0.4)
+            await emit_thinking_phases(
+                phases=[
+                    "Reviewing research briefing for supporting evidence...",
+                    "Constructing opening argument in favor of this decision...",
+                    "Building claim 1 with supporting evidence...",
+                    "Building claim 2 with market validation...",
+                    "Building claim 3 with precedent support...",
+                    "Building claim 4 with risk mitigation analysis...",
+                    "Finalizing prosecution case with confidence assessment...",
+                ],
+                agent_name="prosecutor",
+                event_type="prosecutor_thinking",
+                stream_callback=stream_callback,
+                delay=0.4,
+            )
 
             response = await retry_with_backoff(
                 self.llm.ainvoke, messages,
@@ -143,18 +134,13 @@ class ProsecutorAgent:
 
             # Hallucination guard: if parse produced fallback, retry with low temperature
             if len(argument.claims) == 1 and argument.claims[0].statement == "Argument parsing failed":
-                logger.warning("Prosecutor output malformed, retrying with temperature=0.3")
-                retry_llm = ChatGroq(
-                    model="llama-3.3-70b-versatile",
-                    temperature=0.3,
+                argument = await retry_with_low_temperature(
+                    messages=messages,
+                    parse_fn=self._parse_response,
+                    quality_check_fn=lambda a: len(a.claims) > 1,
                     max_tokens=2048,
-                    api_key=settings.groq_api_key,
+                    operation_name="Prosecutor",
                 )
-                retry_response = await retry_with_backoff(
-                    retry_llm.ainvoke, messages,
-                    max_retries=1, base_delay=0.5, operation_name="Prosecutor LLM (low-temp retry)",
-                )
-                argument = self._parse_response(retry_response.content)
 
             if stream_callback:
                 await stream_callback(
