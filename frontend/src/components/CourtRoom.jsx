@@ -184,6 +184,44 @@ function useDebateSequence(prosecutorOutput, defenseOutput) {
   }, [prosecutorOutput, defenseOutput])
 }
 
+/**
+ * Download an exported report with robust error handling.
+ * @param {string} url - The export API endpoint URL
+ * @param {string} filename - The suggested download filename
+ * @param {'text'|'blob'} responseType - How to read the response body
+ * @param {string} mimeType - MIME type for the Blob (text exports only)
+ * @returns {Promise<void>}
+ */
+async function downloadExport(url, filename, responseType = 'blob', mimeType = '') {
+  try {
+    const response = await fetch(url)
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => 'Unknown error')
+      throw new Error(`Export failed (${response.status}): ${errorText}`)
+    }
+    let blob
+    if (responseType === 'text') {
+      const text = await response.text()
+      blob = new Blob([text], { type: mimeType })
+    } else {
+      blob = await response.blob()
+    }
+    const objectUrl = URL.createObjectURL(blob)
+    const anchor = document.createElement('a')
+    anchor.href = objectUrl
+    anchor.download = filename
+    anchor.click()
+    URL.revokeObjectURL(objectUrl)
+  } catch (err) {
+    console.error(`[Verdict] Export failed for ${filename}:`, err)
+    // Show non-blocking user feedback
+    const msg = err.message || 'Export failed. Please try again.'
+    if (typeof window !== 'undefined' && window.alert) {
+      window.alert(`Export error: ${msg}`)
+    }
+  }
+}
+
 /* ─── Main CourtRoom ─── */
 export default function CourtRoom() {
   const { decision, agentStates, verdict, synthesis, startTime, error, sessionId } = useVerdictStore()
@@ -424,32 +462,20 @@ export default function CourtRoom() {
                   transition={{ duration: 0.6, delay: 0.4 }}
                   className="flex items-center justify-center gap-3"
                 >
-                  <button onClick={() => {
-                    fetch(`/api/verdict/${sessionId}/export/markdown`).then(r => r.text()).then(t => {
-                      const b = new Blob([t], { type: 'text/markdown' }), u = URL.createObjectURL(b), a = document.createElement('a'); a.href = u; a.download = 'verdict-report.md'; a.click(); URL.revokeObjectURL(u)
-                    })
-                  }} className="flex items-center gap-2 px-4 py-2 rounded-lg text-[12px] font-medium bg-[var(--bg-surface)] text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)] border border-[var(--border)] transition">
+                  <button onClick={() => downloadExport(`/api/verdict/${sessionId}/export/markdown`, 'verdict-report.md', 'text', 'text/markdown')}
+                    className="flex items-center gap-2 px-4 py-2 rounded-lg text-[12px] font-medium bg-[var(--bg-surface)] text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)] border border-[var(--border)] transition">
                     📄 Markdown
                   </button>
-                  <button onClick={() => {
-                    fetch(`/api/verdict/${sessionId}/export/pdf`).then(r => r.blob()).then(b => {
-                      const u = URL.createObjectURL(b), a = document.createElement('a'); a.href = u; a.download = 'verdict-report.pdf'; a.click(); URL.revokeObjectURL(u)
-                    })
-                  }} className="flex items-center gap-2 px-4 py-2 rounded-lg text-[12px] font-medium bg-[var(--bg-surface)] text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)] border border-[var(--border)] transition">
+                  <button onClick={() => downloadExport(`/api/verdict/${sessionId}/export/pdf`, 'verdict-report.pdf')}
+                    className="flex items-center gap-2 px-4 py-2 rounded-lg text-[12px] font-medium bg-[var(--bg-surface)] text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)] border border-[var(--border)] transition">
                     📑 PDF Report
                   </button>
-                  <button onClick={() => {
-                    fetch(`/api/verdict/${sessionId}/export/json`).then(r => r.text()).then(t => {
-                      const b = new Blob([t], { type: 'application/json' }), u = URL.createObjectURL(b), a = document.createElement('a'); a.href = u; a.download = 'verdict-data.json'; a.click(); URL.revokeObjectURL(u)
-                    })
-                  }} className="flex items-center gap-2 px-4 py-2 rounded-lg text-[12px] font-medium bg-[var(--bg-surface)] text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)] border border-[var(--border)] transition">
+                  <button onClick={() => downloadExport(`/api/verdict/${sessionId}/export/json`, 'verdict-data.json', 'text', 'application/json')}
+                    className="flex items-center gap-2 px-4 py-2 rounded-lg text-[12px] font-medium bg-[var(--bg-surface)] text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)] border border-[var(--border)] transition">
                     📋 JSON
                   </button>
-                  <button onClick={() => {
-                    fetch(`/api/verdict/${sessionId}/export/docx`).then(r => r.blob()).then(b => {
-                      const u = URL.createObjectURL(b), a = document.createElement('a'); a.href = u; a.download = 'verdict-report.docx'; a.click(); URL.revokeObjectURL(u)
-                    })
-                  }} className="flex items-center gap-2 px-4 py-2 rounded-lg text-[12px] font-medium bg-[var(--bg-surface)] text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)] border border-[var(--border)] transition">
+                  <button onClick={() => downloadExport(`/api/verdict/${sessionId}/export/docx`, 'verdict-report.docx')}
+                    className="flex items-center gap-2 px-4 py-2 rounded-lg text-[12px] font-medium bg-[var(--bg-surface)] text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)] border border-[var(--border)] transition">
                     📝 DOCX
                   </button>
                 </motion.div>
