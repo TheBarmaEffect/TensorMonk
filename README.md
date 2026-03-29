@@ -108,7 +108,10 @@ User Input (question + context + output_format)
 - Real-time WebSocket streaming with typed `StreamEvent` objects
 - Export: Markdown, PDF (via fpdf2), DOCX (via python-docx), and structured JSON — all endpoints functional
 - Follow-up questions: context-aware Q&A against session results via `POST /api/verdict/{id}/followup`
-- Session history: in-memory session list via `GET /api/verdict/sessions/history`, displayed in frontend `SessionHistory` component
+- Session history: persistent JSON-backed session store via `GET /api/verdict/sessions/history`, displayed in frontend `SessionHistory` component
+- Verdict sharing: `GET /api/verdict/{id}/share` generates short URL token, `GET /shared/{token}` retrieves results
+- Web search grounding: Research Agent queries Tavily (or DuckDuckGo fallback) for current facts before LLM analysis
+- 40 unit tests: Pydantic schemas, graph topology, conditional edges, API contract (pytest)
 
 **Frontend (fully functional)**
 - Sequential ACT-based courtroom UI (5 Acts: Investigation, Debate, Cross-Examination, Ruling, Synthesis)
@@ -137,9 +140,9 @@ Tier 2 cut rule: *"analytics charts are cut before the courtroom UI is degraded.
 | Feature | Status | Reason for cut |
 |---------|--------|----------------|
 | Recharts analytics panel | ✅ Functional — `AnalyticsPanel.jsx` wired to live `agentStates`, `verdict`, `synthesis` | Moved to Tier 1 |
-| Verdict history persistence | In-memory only, resets on restart | Redis persistence deferred to post-hackathon |
+| Verdict history persistence | ✅ Functional — JSON file persistence in `data/sessions/` | Moved to Tier 1 |
 | Voice input | ✅ Functional — `MicButton.jsx` + `useVoiceInput.js` | Moved to Tier 1; works in Chrome/Edge |
-| Verdict sharing URL | Not implemented | Time constraint |
+| Verdict sharing URL | ✅ Functional — `GET /{id}/share` + `GET /shared/{token}` | Moved to Tier 1 |
 | DOCX export | ✅ Functional — `GET /api/verdict/{id}/export/docx` | Moved to Tier 1 |
 
 ## Quick Start
@@ -203,6 +206,8 @@ docker-compose up --build
 | `GET` | `/api/verdict/{id}/export/json` | Export as structured JSON |
 | `GET` | `/api/verdict/{id}/export/docx` | Export as formatted DOCX |
 | `POST` | `/api/verdict/{id}/followup` | Context-aware follow-up Q&A |
+| `GET` | `/api/verdict/{id}/share` | Generate shareable verdict URL token |
+| `GET` | `/api/verdict/shared/{token}` | Retrieve verdict by share token |
 | `GET` | `/health` | Health check |
 
 ### POST /api/verdict/start
