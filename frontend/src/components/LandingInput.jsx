@@ -118,6 +118,8 @@ export default function LandingInput() {
             onChange={(e) => setText(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="What decision are you facing?"
+            aria-label="Decision or question to evaluate"
+            aria-describedby="input-help-text"
             className="w-full bg-transparent text-[var(--text-primary)] text-[15px] placeholder:text-[var(--text-muted)] resize-none outline-none px-5 pt-5 pb-2 min-h-[52px] max-h-[160px] leading-relaxed"
             rows={1}
           />
@@ -128,12 +130,15 @@ export default function LandingInput() {
               <MicButton onTranscript={handleTranscript} />
 
               {/* Format picker */}
-              <div className="flex items-center gap-1 ml-1">
+              <div className="flex items-center gap-1 ml-1" role="radiogroup" aria-label="Output format">
                 {OUTPUT_FORMATS.map((f) => (
                   <button
                     key={f.id}
                     onClick={() => setFormat(f.id)}
                     title={f.label}
+                    role="radio"
+                    aria-checked={format === f.id}
+                    aria-label={`${f.label} format`}
                     className={`w-7 h-7 rounded-md flex items-center justify-center text-sm transition-all ${
                       format === f.id
                         ? 'bg-[var(--bg-elevated)] ring-1 ring-[var(--border-hover)]'
@@ -179,7 +184,7 @@ export default function LandingInput() {
 
         {/* Format label + detected domain */}
         <div className="flex items-center justify-center mt-3 gap-2">
-          <span className="text-[11px] text-[var(--text-muted)]">
+          <span id="input-help-text" className="text-[11px] text-[var(--text-muted)]">
             Output: <span className="text-[var(--text-secondary)]">{OUTPUT_FORMATS.find(f => f.id === format)?.label}</span>
             <span className="mx-2 text-[var(--border)]">·</span>
             Press Enter to submit
@@ -199,11 +204,13 @@ export default function LandingInput() {
         </div>
 
         {/* Suggestions */}
-        <div className="mt-8 grid grid-cols-2 gap-2 fade-in-up-d2">
+        <div className="mt-8 grid grid-cols-2 gap-2 fade-in-up-d2" role="list" aria-label="Example decisions">
           {SUGGESTIONS.map((s, i) => (
             <button
               key={i}
               onClick={() => setText(s)}
+              role="listitem"
+              aria-label={`Use example: ${s}`}
               className="text-left px-4 py-3 rounded-xl bg-[var(--bg-surface)] border border-[var(--border)] hover:border-[var(--border-hover)] hover:bg-[var(--bg-elevated)] text-[13px] text-[var(--text-secondary)] leading-snug transition-all"
             >
               {s}
