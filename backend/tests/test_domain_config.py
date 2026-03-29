@@ -48,3 +48,11 @@ class TestDomainConfig:
         for name, config in domains.items():
             assert "synthesis_anchors" in config, \
                 f"Domain {name} missing synthesis_anchors"
+
+class TestListDomainsOrdering:
+    def test_domains_alphabetically_sorted(self):
+        from config.domain_config import list_domains
+        domains = list_domains()
+        assert domains == sorted(domains)
+        assert domains[0] == "business"  # First alphabetically
+
