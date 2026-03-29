@@ -96,7 +96,7 @@ class ResearchAgent:
     def __init__(self) -> None:
         self.llm = create_llm(temperature=0.5, max_tokens=2048)
 
-    async def run(
+    async def run(  # noqa: C901
         self,
         decision_question: str,
         context: Optional[str] = None,
