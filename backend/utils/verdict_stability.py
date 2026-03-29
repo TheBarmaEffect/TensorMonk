@@ -276,12 +276,16 @@ def sensitivity_analysis(
         len(pivotal_witnesses), len(witness_reports), fragility,
     )
 
+    # Sort by margin_shift descending — most impactful witnesses first
+    per_witness_impact.sort(key=lambda w: w["margin_shift"], reverse=True)
+
     return {
         "pivotal_witnesses": pivotal_witnesses,
         "fragility_score": round(fragility, 4),
         "per_witness_impact": per_witness_impact,
         "full_verdict_direction": full_winner,
         "full_margin": round(full_margin, 4),
+        "most_impactful": per_witness_impact[0]["claim_id"] if per_witness_impact else None,
     }
 
 
