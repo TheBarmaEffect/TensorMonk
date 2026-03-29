@@ -1,110 +1,53 @@
 import { useMemo } from 'react'
-import { motion } from 'framer-motion'
 import AgentNode from './AgentNode'
 import useVerdictStore from '../store/verdictStore'
 
-const NODE_POSITIONS = {
-  research:  { x: 50, y: 82 },
-  prosecutor: { x: 22, y: 50 },
-  defense:   { x: 78, y: 50 },
-  judge:     { x: 50, y: 22 },
-  synthesis:  { x: 50, y: 5 },
+const POS = {
+  research:   { x: 50, y: 85 },
+  prosecutor: { x: 20, y: 55 },
+  defense:    { x: 80, y: 55 },
+  judge:      { x: 50, y: 28 },
+  synthesis:  { x: 50, y: 8 },
 }
-
-const WITNESS_POSITIONS = [
-  { x: 35, y: 36 },
-  { x: 50, y: 40 },
-  { x: 65, y: 36 },
+const WPOS = [{ x: 30, y: 40 }, { x: 50, y: 44 }, { x: 70, y: 40 }]
+const CONNS = [
+  { from: 'research', to: 'prosecutor', color: '#6b7280' },
+  { from: 'research', to: 'defense', color: '#6b7280' },
+  { from: 'prosecutor', to: 'judge', color: '#ef4444' },
+  { from: 'defense', to: 'judge', color: '#3b82f6' },
+  { from: 'judge', to: 'synthesis', color: '#f59e0b' },
 ]
 
-const CONNECTIONS = [
-  { from: 'research', to: 'prosecutor', color: 'var(--research-color)' },
-  { from: 'research', to: 'defense', color: 'var(--research-color)' },
-  { from: 'prosecutor', to: 'judge', color: 'var(--prosecutor-color)' },
-  { from: 'defense', to: 'judge', color: 'var(--defense-color)' },
-  { from: 'judge', to: 'synthesis', color: 'var(--judge-color)' },
-]
-
-function ConnectionLine({ from, to, color, isActive }) {
-  const x1 = from.x
-  const y1 = from.y
-  const x2 = to.x
-  const y2 = to.y
-
-  return (
-    <line
-      x1={`${x1}%`} y1={`${y1}%`}
-      x2={`${x2}%`} y2={`${y2}%`}
-      stroke={color}
-      strokeWidth="1.5"
-      strokeDasharray="6 4"
-      strokeOpacity={isActive ? 0.8 : 0.15}
-      className={isActive ? 'animate-dash-flow' : ''}
-    />
-  )
+function Line({ from, to, color, active }) {
+  return <line x1={`${from.x}%`} y1={`${from.y}%`} x2={`${to.x}%`} y2={`${to.y}%`}
+    stroke={color} strokeWidth="1" strokeDasharray="5 4" strokeOpacity={active ? 0.6 : 0.1}
+    className={active ? 'dash-flow' : ''} />
 }
 
 export default function AgentGraph() {
-  const agentStates = useVerdictStore((s) => s.agentStates)
-
-  const isConnectionActive = (fromAgent, toAgent) => {
-    const from = fromAgent === 'research' ? agentStates.research : agentStates[fromAgent]
-    const to = toAgent === 'synthesis' ? agentStates.synthesis : agentStates[toAgent]
+  const a = useVerdictStore(s => s.agentStates)
+  const isActive = (f, t) => {
+    const from = a[f], to = a[t]
     if (!from || !to) return false
-    return from.status === 'active' || from.status === 'complete' || to.status === 'active'
+    return from.status === 'complete' || from.status === 'active' || to.status === 'active'
   }
-
-  const witnessNodes = useMemo(() => {
-    return agentStates.witnesses.map((w, i) => ({
-      ...w,
-      position: WITNESS_POSITIONS[i] || WITNESS_POSITIONS[0],
-    }))
-  }, [agentStates.witnesses])
+  const wn = useMemo(() => a.witnesses.map((w, i) => ({ ...w, pos: WPOS[i] || WPOS[0] })), [a.witnesses])
 
   return (
     <div className="relative w-full h-full">
-      {/* SVG connection lines */}
+      <div className="absolute top-3 left-0 right-0 text-center z-20">
+        <span className="text-[9px] font-mono text-white/20 uppercase tracking-[0.2em]">Agent Network</span>
+      </div>
       <svg className="absolute inset-0 w-full h-full" style={{ zIndex: 0 }}>
-        {CONNECTIONS.map((conn, i) => (
-          <ConnectionLine
-            key={i}
-            from={NODE_POSITIONS[conn.from]}
-            to={NODE_POSITIONS[conn.to]}
-            color={conn.color}
-            isActive={isConnectionActive(conn.from, conn.to)}
-          />
-        ))}
-
-        {/* Witness connection lines */}
-        {witnessNodes.map((w, i) => (
-          <ConnectionLine
-            key={`witness-${i}`}
-            from={NODE_POSITIONS.judge}
-            to={w.position}
-            color="var(--witness-color)"
-            isActive={w.status === 'active' || w.status === 'complete'}
-          />
-        ))}
+        {CONNS.map((c, i) => <Line key={i} from={POS[c.from]} to={POS[c.to]} color={c.color} active={isActive(c.from, c.to)} />)}
+        {wn.map((w, i) => <Line key={`w${i}`} from={POS.judge} to={w.pos} color="#a78bfa" active={w.status === 'active' || w.status === 'complete'} />)}
       </svg>
-
-      {/* Agent nodes */}
-      <AgentNode agent="research" status={agentStates.research.status} x={NODE_POSITIONS.research.x} y={NODE_POSITIONS.research.y} animationDelay={0} />
-      <AgentNode agent="prosecutor" status={agentStates.prosecutor.status} x={NODE_POSITIONS.prosecutor.x} y={NODE_POSITIONS.prosecutor.y} animationDelay={0.5} />
-      <AgentNode agent="defense" status={agentStates.defense.status} x={NODE_POSITIONS.defense.x} y={NODE_POSITIONS.defense.y} animationDelay={0.7} />
-      <AgentNode agent="judge" status={agentStates.judge.status} x={NODE_POSITIONS.judge.x} y={NODE_POSITIONS.judge.y} animationDelay={0.3} />
-      <AgentNode agent="synthesis" status={agentStates.synthesis.status} x={NODE_POSITIONS.synthesis.x} y={NODE_POSITIONS.synthesis.y} animationDelay={0.9} />
-
-      {/* Dynamic witness nodes */}
-      {witnessNodes.map((w, i) => (
-        <AgentNode
-          key={`witness-${i}`}
-          agent="witness"
-          status={w.status}
-          x={w.position.x}
-          y={w.position.y}
-          animationDelay={0}
-        />
-      ))}
+      <AgentNode agent="research" status={a.research.status} x={POS.research.x} y={POS.research.y} animationDelay={0} />
+      <AgentNode agent="prosecutor" status={a.prosecutor.status} x={POS.prosecutor.x} y={POS.prosecutor.y} animationDelay={0.4} />
+      <AgentNode agent="defense" status={a.defense.status} x={POS.defense.x} y={POS.defense.y} animationDelay={0.6} />
+      <AgentNode agent="judge" status={a.judge.status} x={POS.judge.x} y={POS.judge.y} animationDelay={0.2} />
+      <AgentNode agent="synthesis" status={a.synthesis.status} x={POS.synthesis.x} y={POS.synthesis.y} animationDelay={0.8} />
+      {wn.map((w, i) => <AgentNode key={`w${i}`} agent="witness" status={w.status} x={w.pos.x} y={w.pos.y} animationDelay={0} />)}
     </div>
   )
 }

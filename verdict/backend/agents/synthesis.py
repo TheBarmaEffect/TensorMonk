@@ -111,19 +111,29 @@ class SynthesisAgent:
         ]
 
         try:
-            full_response = ""
-            async for chunk in self.llm.astream(messages):
-                token = chunk.content
-                if token:
-                    full_response += token
-                    if stream_callback:
-                        await stream_callback(
-                            StreamEvent(
-                                event_type="synthesis_start",
-                                agent="synthesis",
-                                content=token,
-                            )
+            thinking_phases = [
+                "Reviewing prosecution's strongest points...",
+                "Reviewing defense's key objections...",
+                "Analyzing witness verification outcomes...",
+                "Incorporating judge's ruling and reasoning...",
+                "Constructing improved, battle-tested version...",
+                "Identifying concrete next steps and actions...",
+            ]
+
+            for phase in thinking_phases:
+                if stream_callback:
+                    await stream_callback(
+                        StreamEvent(
+                            event_type="synthesis_start",
+                            agent="synthesis",
+                            content=phase + "\n",
                         )
+                    )
+                    import asyncio
+                    await asyncio.sleep(0.3)
+
+            response = await self.llm.ainvoke(messages)
+            full_response = response.content
 
             data = self._parse_json(full_response)
 

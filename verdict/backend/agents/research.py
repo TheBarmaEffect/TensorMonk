@@ -73,19 +73,30 @@ class ResearchAgent:
         ]
 
         try:
-            full_response = ""
-            async for chunk in self.llm.astream(messages):
-                token = chunk.content
-                if token:
-                    full_response += token
-                    if stream_callback:
-                        await stream_callback(
-                            StreamEvent(
-                                event_type="research_start",
-                                agent="research",
-                                content=token,
-                            )
+            # Send thinking messages (not raw tokens)
+            thinking_phases = [
+                "Scanning market landscape and competitive environment...",
+                "Gathering relevant data points and statistics...",
+                "Analyzing historical precedents and case studies...",
+                "Identifying key stakeholders and risk factors...",
+                "Compiling research synthesis...",
+            ]
+
+            for phase in thinking_phases:
+                if stream_callback:
+                    await stream_callback(
+                        StreamEvent(
+                            event_type="research_start",
+                            agent="research",
+                            content=phase + "\n",
                         )
+                    )
+                    import asyncio
+                    await asyncio.sleep(0.3)
+
+            # Run LLM (don't stream raw tokens to UI)
+            response = await self.llm.ainvoke(messages)
+            full_response = response.content
 
             research_package = self._parse_response(full_response)
 

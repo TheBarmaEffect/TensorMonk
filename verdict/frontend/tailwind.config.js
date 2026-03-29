@@ -7,23 +7,24 @@ export default {
   theme: {
     extend: {
       colors: {
-        void: '#050508',
-        surface: '#0c0c14',
-        elevated: '#12121e',
-        prosecutor: '#f43f5e',
+        bg: {
+          primary: '#0d0d0d',
+          secondary: '#161616',
+          surface: '#1a1a1a',
+          elevated: '#222222',
+          hover: '#2a2a2a',
+        },
+        gold: { DEFAULT: '#d4a853', light: '#e0be72', dark: '#b08d3e' },
+        prosecutor: '#ef4444',
         defense: '#3b82f6',
         judge: '#f59e0b',
         witness: '#a78bfa',
         synthesis: '#10b981',
-        research: '#94a3b8',
+        research: '#6b7280',
       },
       fontFamily: {
-        display: ['Space Grotesk', 'sans-serif'],
-        body: ['Inter', 'sans-serif'],
-        mono: ['JetBrains Mono', 'monospace'],
-      },
-      borderRadius: {
-        DEFAULT: '16px',
+        body: ['Inter', '-apple-system', 'system-ui', 'sans-serif'],
+        mono: ['JetBrains Mono', 'SF Mono', 'monospace'],
       },
     },
   },

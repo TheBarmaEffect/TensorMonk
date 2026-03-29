@@ -71,20 +71,31 @@ class DefenseAgent:
         ]
 
         try:
-            full_response = ""
-            async for chunk in self.llm.astream(messages):
-                token = chunk.content
-                if token:
-                    full_response += token
-                    if stream_callback:
-                        await stream_callback(
-                            StreamEvent(
-                                event_type="defense_thinking",
-                                agent="defense",
-                                content=token,
-                            )
-                        )
+            thinking_phases = [
+                "Analyzing research for potential weaknesses in this decision...",
+                "Identifying market risks and competitive threats...",
+                "Constructing counter-argument with evidence...",
+                "Building claim 1 — critical risk assessment...",
+                "Building claim 2 — market reality check...",
+                "Building claim 3 — alternative approach analysis...",
+                "Building claim 4 — worst-case scenario evaluation...",
+                "Finalizing defense case...",
+            ]
 
+            for phase in thinking_phases:
+                if stream_callback:
+                    await stream_callback(
+                        StreamEvent(
+                            event_type="defense_thinking",
+                            agent="defense",
+                            content=phase + "\n",
+                        )
+                    )
+                    import asyncio
+                    await asyncio.sleep(0.4)
+
+            response = await self.llm.ainvoke(messages)
+            full_response = response.content
             argument = self._parse_response(full_response)
 
             if stream_callback:
