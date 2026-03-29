@@ -121,8 +121,12 @@ export default function useVerdict() {
           throw new Error(`Failed to create session: ${res.statusText}`)
         }
 
-        const { session_id, decision } = await res.json()
+        const data = await res.json()
+        const session_id = data.session_id
+        const decision = data.decision
+        console.log('[useVerdict] Session created:', session_id, 'transitioning to courtroom')
         startSession(session_id, decision)
+        console.log('[useVerdict] startSession called, screen should be courtroom now')
 
         // Connect WebSocket
         const ws = new WebSocket(getWsUrl(session_id))

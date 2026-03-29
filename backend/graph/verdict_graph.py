@@ -70,6 +70,11 @@ def strip_authorship(research_package: dict) -> dict:
 
 logger = logging.getLogger(__name__)
 
+# Module-level callback registry — stores stream_callback functions keyed by
+# thread_id so they don't enter the serializable LangGraph state. This avoids
+# "Type is not msgpack serializable: function" errors from the checkpointer.
+_callback_registry: dict[str, Callable] = {}
+
 
 class VerdictState(TypedDict):
     """The shared state flowing through the verdict graph.
@@ -91,7 +96,7 @@ class VerdictState(TypedDict):
     cross_examination: Optional[dict]
     verdict: Optional[dict]
     synthesis: Optional[dict]
-    stream_callback: Optional[Callable]
+    thread_id: str
     errors: Annotated[list, operator.add]
 
 
@@ -106,7 +111,7 @@ async def research_node(state: VerdictState) -> dict:
     """
     agent = ResearchAgent()
     decision = state["decision"]
-    callback = state.get("stream_callback")
+    callback = _callback_registry.get(state.get("thread_id", ""))
     output_format = state.get("output_format", "executive")
     domain = state.get("domain", "business")
 
@@ -134,7 +139,7 @@ async def prosecutor_node(state: VerdictState) -> dict:
     agent = ProsecutorAgent()
     decision = state["decision"]
     research = strip_authorship(state.get("research_package", {}))
-    callback = state.get("stream_callback")
+    callback = _callback_registry.get(state.get("thread_id", ""))
     output_format = state.get("output_format", "executive")
     domain = state.get("domain", "business")
 
@@ -162,7 +167,7 @@ async def defense_node(state: VerdictState) -> dict:
     agent = DefenseAgent()
     decision = state["decision"]
     research = strip_authorship(state.get("research_package", {}))
-    callback = state.get("stream_callback")
+    callback = _callback_registry.get(state.get("thread_id", ""))
     output_format = state.get("output_format", "executive")
     domain = state.get("domain", "business")
 
@@ -206,7 +211,7 @@ async def judge_cross_exam_node(state: VerdictState) -> dict:
 
     judge = JudgeAgent()
     decision = state["decision"]
-    callback = state.get("stream_callback")
+    callback = _callback_registry.get(state.get("thread_id", ""))
 
     pro_data = state.get("prosecutor_argument")
     def_data = state.get("defense_argument")
@@ -234,7 +239,7 @@ async def witness_node(state: VerdictState) -> dict:
     """Spawn witness agents in parallel to verify contested claims."""
     witness_agent = WitnessAgent()
     contested = state.get("contested_claims", [])
-    callback = state.get("stream_callback")
+    callback = _callback_registry.get(state.get("thread_id", ""))
 
     if not contested:
         return {"witness_reports": []}
@@ -293,7 +298,7 @@ async def _run_verdict(state: VerdictState, use_low_temp: bool = False) -> dict:
 
     judge = JudgeAgent()
     decision = state["decision"]
-    callback = state.get("stream_callback")
+    callback = _callback_registry.get(state.get("thread_id", ""))
 
     pro_data = state.get("prosecutor_argument")
     def_data = state.get("defense_argument")
@@ -338,7 +343,7 @@ async def judge_verdict_with_review_node(state: VerdictState) -> dict:
     here to allow human review of witness reports before the ruling is issued.
     """
     logger.info("Verdict node (low confidence path): interrupt_before checkpoint reached")
-    callback = state.get("stream_callback")
+    callback = _callback_registry.get(state.get("thread_id", ""))
     if callback:
         await callback(StreamEvent(
             event_type="verdict_start",
@@ -356,7 +361,7 @@ async def judge_verdict_low_temp_node(state: VerdictState) -> dict:
     more deterministic, grounded output.
     """
     logger.info("Verdict node (hallucination guard): using temperature=0.3")
-    callback = state.get("stream_callback")
+    callback = _callback_registry.get(state.get("thread_id", ""))
     if callback:
         await callback(StreamEvent(
             event_type="verdict_start",
@@ -376,7 +381,7 @@ async def synthesis_node(state: VerdictState) -> dict:
 
     agent = SynthesisAgent()
     decision = state["decision"]
-    callback = state.get("stream_callback")
+    callback = _callback_registry.get(state.get("thread_id", ""))
     output_format = state.get("output_format", "executive")
     domain = state.get("domain", "business")
 
@@ -595,6 +600,13 @@ async def run_verdict_graph(
     """
     compiled = build_verdict_graph()
 
+    tid = thread_id or decision.get("id", "default")
+
+    # Register the callback outside the state so the checkpointer
+    # never tries to serialize a function object.
+    if stream_callback:
+        _callback_registry[tid] = stream_callback
+
     initial_state: VerdictState = {
         "decision": decision,
         "output_format": output_format,
@@ -607,15 +619,17 @@ async def run_verdict_graph(
         "cross_examination": None,
         "verdict": None,
         "synthesis": None,
-        "stream_callback": stream_callback,
+        "thread_id": tid,
         "errors": [],
     }
 
-    config = {"configurable": {"thread_id": thread_id or decision.get("id", "default")}}
+    config = {"configurable": {"thread_id": tid}}
 
     logger.info("Starting verdict graph for decision: %s", decision.get("question", "")[:80])
 
-    result = await compiled.ainvoke(initial_state, config=config)
-
-    logger.info("Verdict graph complete. Errors: %s", result.get("errors", []))
-    return result
+    try:
+        result = await compiled.ainvoke(initial_state, config=config)
+        logger.info("Verdict graph complete. Errors: %s", result.get("errors", []))
+        return result
+    finally:
+        _callback_registry.pop(tid, None)
