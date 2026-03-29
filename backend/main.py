@@ -35,7 +35,7 @@ _startup_time = time.monotonic()
 app = FastAPI(
     title="Verdict API",
     description="Multi-agent adversarial AI courtroom for decision evaluation",
-    version="1.0.0",
+    version="1.4.0",
 )
 
 # ─── Middleware stack (order matters: outermost first) ───
