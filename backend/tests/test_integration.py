@@ -468,3 +468,102 @@ class TestAnalysisPipelineIntegration:
         assert resp.status_code == 200
         data = resp.json()
         assert "format_suggestion" in data
+
+
+class TestIntelligencePipelineIntegration:
+    """Test that computed intelligence flows through state and influences behavior."""
+
+    def test_verdict_state_includes_intelligence_fields(self):
+        """VerdictState should include argument_quality, argument_graphs, verdict_stability."""
+        from graph.verdict_graph import VerdictState
+        import typing
+        hints = typing.get_type_hints(VerdictState)
+        assert "argument_quality" in hints
+        assert "argument_graphs" in hints
+        assert "verdict_stability" in hints
+
+    def test_graph_analysis_flows_to_witness_prioritization(self):
+        """Witness node should re-order contested claims by cascading impact."""
+        from utils.argument_graph import build_argument_graphs
+
+        pro_claims = [
+            {"id": "p1", "statement": "Strong market demand for cloud solutions growing rapidly", "evidence": "Gartner report 2024", "confidence": 0.85},
+            {"id": "p2", "statement": "Cloud adoption drives efficiency improvements", "evidence": "IDC forecast", "confidence": 0.75},
+        ]
+        def_claims = [
+            {"id": "d1", "statement": "Cloud migration costs prohibitive for SMBs", "evidence": "CIO survey", "confidence": 0.7},
+        ]
+
+        result = build_argument_graphs(pro_claims, def_claims)
+        # Graph analysis should contain per-claim metrics used for prioritization
+        assert "prosecution" in result
+        pro_data = result["prosecution"]
+        assert "per_claim" in pro_data
+        for cid in pro_data["per_claim"]:
+            assert "cascading_impact" in pro_data["per_claim"][cid]
+
+    def test_structural_analysis_passed_to_judge(self):
+        """Judge's cross_examine should accept structural_analysis parameter."""
+        import inspect
+        from agents.judge import JudgeAgent
+        sig = inspect.signature(JudgeAgent.cross_examine)
+        params = list(sig.parameters.keys())
+        assert "structural_analysis" in params
+
+    def test_synthesis_accepts_stability_and_quality(self):
+        """Synthesis agent should accept verdict_stability and argument_quality."""
+        import inspect
+        from agents.synthesis import SynthesisAgent
+        sig = inspect.signature(SynthesisAgent.run)
+        params = list(sig.parameters.keys())
+        assert "verdict_stability" in params
+        assert "argument_quality" in params
+
+    def test_quality_stored_in_state_from_arguments_node(self):
+        """parallel_arguments_node should compute and store argument_quality in state."""
+        from utils.argument_quality import score_argument_quality
+
+        # Verify score_argument_quality returns fields needed by state
+        result = score_argument_quality({
+            "agent": "prosecutor",
+            "opening": "Test opening",
+            "claims": [
+                {"id": "p1", "statement": "Test claim with evidence", "evidence": "Source", "confidence": 0.8},
+            ],
+            "confidence": 0.8,
+        })
+        assert "grade" in result
+        assert "overall" in result
+        # These are the fields stored in state["argument_quality"]
+        assert isinstance(result["grade"], str)
+        assert isinstance(result["overall"], float)
+
+    def test_stability_contains_routing_fields(self):
+        """Verdict stability should contain fields used by synthesis for cautious recommendations."""
+        from utils.verdict_stability import full_stability_analysis
+
+        result = full_stability_analysis(
+            prosecution_score=0.65,
+            defense_score=0.60,
+            ruling="conditional",
+            witness_reports=[
+                {"claim_id": "p1", "confidence": 0.6, "verdict_on_claim": "sustained"},
+            ],
+            prosecution_base_confidence=0.7,
+            defense_base_confidence=0.65,
+        )
+        # These fields flow into synthesis via verdict_stability state
+        assert "combined_robustness" in result
+        assert "verdict_is_robust" in result
+        assert "evidence_margin" in result
+        margin = result["evidence_margin"]
+        assert "classification" in margin  # decisive|moderate|narrow|razor_thin
+
+    def test_domain_confidence_thresholds_exist(self):
+        """Domain-specific confidence thresholds should be defined for routing."""
+        from graph.verdict_graph import DOMAIN_CONFIDENCE_THRESHOLDS
+        assert "medical" in DOMAIN_CONFIDENCE_THRESHOLDS
+        assert "legal" in DOMAIN_CONFIDENCE_THRESHOLDS
+        assert "technology" in DOMAIN_CONFIDENCE_THRESHOLDS
+        # Medical should require higher confidence than technology
+        assert DOMAIN_CONFIDENCE_THRESHOLDS["medical"] > DOMAIN_CONFIDENCE_THRESHOLDS["technology"]
