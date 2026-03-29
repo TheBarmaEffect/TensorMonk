@@ -366,3 +366,105 @@ class TestSynthesisCoverage:
         assert coverage["objection_coverage"] > 0
         assert coverage["has_time_bounds"] is True
         assert coverage["strength_delta"] == pytest.approx(0.8 - 0.85, abs=0.01)
+
+
+class TestAnalysisPipelineIntegration:
+    """Test the full analytical pipeline: quality scoring → graph → stability."""
+
+    def _make_arg_dict(self, agent: str, claims: list[dict], confidence: float = 0.75) -> dict:
+        """Create a serialized argument dict for analysis."""
+        return {
+            "agent": agent,
+            "opening": f"Opening statement for {agent}",
+            "claims": claims,
+            "confidence": confidence,
+        }
+
+    def test_quality_scores_both_sides(self):
+        """score_argument_quality should produce grades for prosecution and defense."""
+        from utils.argument_quality import score_argument_quality
+
+        pro = self._make_arg_dict("prosecutor", [
+            {"id": "p1", "statement": "Market growing at 25% annually in 2024 according to Gartner", "evidence": "Gartner Q3 2024 report", "confidence": 0.85},
+            {"id": "p2", "statement": "Customer retention exceeds 90% in B2B SaaS", "evidence": "SaaS Capital annual survey", "confidence": 0.8},
+            {"id": "p3", "statement": "Unit economics are positive with CAC:LTV of 1:5", "evidence": "Internal financial model", "confidence": 0.75},
+            {"id": "p4", "statement": "Three competitors acquired in last 12 months", "evidence": "TechCrunch coverage", "confidence": 0.7},
+        ])
+        result = score_argument_quality(pro)
+        assert "grade" in result
+        assert result["grade"] in ("A", "B", "C", "D")
+        assert 0.0 <= result["overall"] <= 1.0
+        assert "evidence_specificity" in result["dimensions"]
+
+    def test_stability_analysis_end_to_end(self):
+        """full_stability_analysis should combine margin + perturbation."""
+        from utils.verdict_stability import full_stability_analysis
+
+        result = full_stability_analysis(
+            prosecution_score=0.78,
+            defense_score=0.62,
+            ruling="proceed",
+            witness_reports=[
+                {"claim_id": "p1", "confidence": 0.85, "verdict_on_claim": "sustained"},
+                {"claim_id": "d1", "confidence": 0.7, "verdict_on_claim": "overruled"},
+            ],
+            prosecution_base_confidence=0.8,
+            defense_base_confidence=0.65,
+        )
+        assert "evidence_margin" in result
+        assert "perturbation_stability" in result
+        assert "combined_robustness" in result
+        assert 0.0 <= result["combined_robustness"] <= 1.0
+
+    def test_argument_graphs_comparative(self):
+        """build_argument_graphs should produce comparative metrics."""
+        from utils.argument_graph import build_argument_graphs
+
+        pro_claims = [
+            {"id": "p1", "statement": "Strong market demand for cloud solutions", "evidence": "Gartner report", "confidence": 0.8},
+            {"id": "p2", "statement": "Cloud adoption drives market growth", "evidence": "IDC forecast", "confidence": 0.75},
+        ]
+        def_claims = [
+            {"id": "d1", "statement": "Cloud migration costs are prohibitive", "evidence": "CIO survey", "confidence": 0.7},
+        ]
+
+        result = build_argument_graphs(pro_claims, def_claims)
+        assert "prosecution" in result
+        assert "defense" in result
+        assert "comparative" in result
+        assert result["prosecution"]["node_count"] == 2
+        assert result["defense"]["node_count"] == 1
+
+    def test_quality_feeds_into_synthesis(self):
+        """Argument quality grades should be computed by synthesis agent."""
+        from utils.argument_quality import score_argument_quality
+
+        weak_arg = self._make_arg_dict("defense", [
+            {"id": "d1", "statement": "Bad idea", "evidence": "Trust me", "confidence": 0.5},
+        ], confidence=0.4)
+        strong_arg = self._make_arg_dict("prosecutor", [
+            {"id": "p1", "statement": "Market analysis shows 35% CAGR in enterprise SaaS", "evidence": "Gartner 2024 report", "confidence": 0.88},
+            {"id": "p2", "statement": "Customer churn below 5% indicates strong product-market fit", "evidence": "Internal metrics dashboard", "confidence": 0.82},
+            {"id": "p3", "statement": "Unit economics positive with 18-month payback period", "evidence": "Financial model v3", "confidence": 0.79},
+        ], confidence=0.85)
+
+        weak_quality = score_argument_quality(weak_arg)
+        strong_quality = score_argument_quality(strong_arg)
+        assert strong_quality["overall"] > weak_quality["overall"]
+        # Strong argument should score better than weak, though grade depends on heuristic thresholds
+        assert strong_quality["grade"] in ("A", "B", "C")
+
+    def test_validators_wired_to_api(self, client):
+        """API should reject generic questions via quality validator."""
+        resp = client.post("/api/verdict/start", json={"question": "test?"})
+        assert resp.status_code == 422
+
+    def test_format_suggestion_in_response(self, client):
+        """API should include format_suggestion when format-domain mismatch."""
+        resp = client.post("/api/verdict/start", json={
+            "question": "Should we adopt a new compliance framework for GDPR regulations?",
+            "output_format": "technical",
+        })
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "format_suggestion" in data

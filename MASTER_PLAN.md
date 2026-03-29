@@ -100,7 +100,7 @@ Build a **multi-agent adversarial AI courtroom** that takes any decision or idea
 | Verdict stability perturbation analysis | ✅ | `utils/verdict_stability.py` — 50-run Monte Carlo, evidence margin |
 | Argument quality scoring (A-D grades) | ✅ | `utils/argument_quality.py` — 5-dimension heuristic assessment |
 | Inline analysis in session results | ✅ | `run_pipeline()` computes quality/stability/graph and embeds in result |
-| 389 tests (unit + integration) | ✅ | 22 test files (pytest) |
+| 395 tests (unit + integration) | ✅ | 22 test files (pytest) |
 
 ### Pre-Committed Cut Rule
 > "Analytics charts are cut before the courtroom UI is degraded."
@@ -132,7 +132,7 @@ All Tier 2 features were moved to functional status. The courtroom UI was never 
 |-----------|-------|-------|
 | test_schemas.py | 13 | Pydantic model validation, confidence bounds |
 | test_graph.py | 31 | Graph topology, strip_authorship, conditional edges, adaptive temp, calibration, constitutional compliance |
-| test_api.py | 23 | API contracts, input validation, domain detection, question quality gate |
+| test_api.py | 23 | API contracts, input validation, domain detection, quality gate |
 | test_exports.py | 11 | PDF/DOCX/MD/JSON generation, domain themes |
 | test_resilience.py | 10 | Retry backoff, circuit breaker states |
 | test_cache.py | 9 | TTL expiration, key normalization, eviction |
@@ -142,7 +142,7 @@ All Tier 2 features were moved to functional status. The courtroom UI was never 
 | test_metrics.py | 7 | Agent tracking, pipeline metrics |
 | test_security.py | 22 | XSS detection, input sanitization, security headers |
 | test_prompts.py | 22 | Constitutional directive auditing, prompt structure |
-| test_integration.py | 31 | Session lifecycle, domain detection, analytics, claim overlap, research quality, synthesis coverage |
+| test_integration.py | 37 | Session lifecycle, domain detection, analytics, claim overlap, research quality, synthesis coverage, analysis pipeline |
 | test_graph_viz.py | 17 | Pipeline topology, witness nodes, routing paths |
 | test_session_manager.py | 23 | FSM state transitions, lifecycle tracking, serialization |
 | test_validators.py | 22 | Question quality, research completeness, format-domain fit |
@@ -152,7 +152,7 @@ All Tier 2 features were moved to functional status. The courtroom UI was never 
 | test_verdict_stability.py | 17 | Evidence margin, perturbation Monte Carlo, flip rate bounds |
 | test_argument_quality.py | 24 | Specificity, diversity, calibration, coherence, grading |
 | test_llm_helpers.py | 23 | JSON parsing, code fence stripping, thinking phases, LLM factory, low-temp retry |
-| **Total** | **389** | |
+| **Total** | **395** | |
 
 ## Technical Decisions
 
