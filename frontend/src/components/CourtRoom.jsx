@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useMemo } from 'react'
+import { useEffect, useRef, useState, useMemo, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import VerdictCard from './VerdictCard'
 import SynthesisCard from './SynthesisCard'
@@ -6,6 +6,7 @@ import FollowUp from './FollowUp'
 import AnalyticsPanel from './AnalyticsPanel'
 import ComparisonMode from './ComparisonMode'
 import PipelineGraph from './PipelineGraph'
+import useKeyboardShortcuts from '../hooks/useKeyboardShortcuts'
 import useVerdictStore from '../store/verdictStore'
 
 /* ─── Safe parse helper ─── */
@@ -233,6 +234,15 @@ export default function CourtRoom() {
   const [showPipeline, setShowPipeline] = useState(false)
   const [visibleBubbles, setVisibleBubbles] = useState(0)
   const isComplete = !!(verdict && synthesis)
+
+  // Keyboard shortcuts for power users
+  useKeyboardShortcuts({
+    onEscape: reset,
+    onExportMarkdown: isComplete ? () => downloadExport(`/api/verdict/${sessionId}/export/markdown`, 'verdict-report.md', 'text', 'text/markdown') : undefined,
+    onToggleAnalytics: isComplete ? () => { setShowAnalytics(v => !v); setShowComparison(false); setShowPipeline(false) } : undefined,
+    onToggleComparison: isComplete ? () => { setShowComparison(v => !v); setShowAnalytics(false); setShowPipeline(false) } : undefined,
+    onTogglePipeline: () => { setShowPipeline(v => !v); setShowAnalytics(false); setShowComparison(false) },
+  })
 
   const debateSequence = useDebateSequence(agentStates.prosecutor.output, agentStates.defense.output)
 
