@@ -168,6 +168,44 @@ class ArgumentGraph:
             if self.in_degree(cid) == max_in
         ]
 
+    def structural_entropy(self) -> float:
+        """Compute the structural entropy of the argument graph.
+
+        Uses Shannon entropy over the normalized degree distribution to
+        measure how evenly dependencies are distributed across claims.
+
+        Low entropy: a few claims carry all the dependencies (star topology)
+            → fragile, high-impact if a central claim is overruled
+        High entropy: dependencies are evenly distributed (mesh topology)
+            → robust, no single point of failure
+
+        Returns:
+            Entropy value in [0.0, log2(n)]. Normalized to [0.0, 1.0].
+        """
+        if len(self._node_data) <= 1:
+            return 0.0
+
+        # Total degree (in + out) per node
+        degrees = []
+        for cid in self._node_data:
+            total_deg = self.in_degree(cid) + self.out_degree(cid)
+            degrees.append(total_deg)
+
+        total = sum(degrees)
+        if total == 0:
+            return 1.0  # No edges → perfectly "distributed" (trivially)
+
+        # Shannon entropy of normalized degree distribution
+        entropy = 0.0
+        for d in degrees:
+            if d > 0:
+                p = d / total
+                entropy -= p * math.log2(p)
+
+        # Normalize by max possible entropy (uniform distribution)
+        max_entropy = math.log2(len(degrees))
+        return round(entropy / max_entropy, 4) if max_entropy > 0 else 0.0
+
     def coherence_score(self) -> float:
         """Measure argument coherence as fraction of nodes in the largest component.
 
@@ -260,6 +298,7 @@ class ArgumentGraph:
             "node_count": len(self._node_data),
             "edge_count": total_edges,
             "coherence": self.coherence_score(),
+            "structural_entropy": self.structural_entropy(),
             "foundation_claims": self.foundation_claims,
             "critical_claims": self.critical_claims,
             "vulnerable_claims": self.vulnerable_claims,
@@ -392,6 +431,108 @@ class ArgumentGraph:
         }
 
 
+class CrossGraphAnalyzer:
+    """Analyzes dependencies BETWEEN prosecution and defense argument graphs.
+
+    While each side's internal graph captures logical dependencies within
+    an argument, the cross-graph analysis identifies claims from opposing
+    sides that reference the same underlying facts. This reveals:
+
+    1. **Shared evidence claims**: Both sides citing the same data for
+       opposite conclusions — the most contested factual territory.
+    2. **Contradictory foundations**: Foundation claims on one side that
+       directly conflict with foundation claims on the other.
+    3. **Asymmetric vulnerability**: Claims on one side that depend on
+       facts the other side attacks — structural weakness.
+
+    This analysis feeds into cross-examination to help the Judge identify
+    the most productive lines of questioning.
+    """
+
+    def __init__(self, pro_graph: ArgumentGraph, def_graph: ArgumentGraph):
+        self.pro = pro_graph
+        self.defense = def_graph
+
+    def find_shared_evidence(self, similarity_threshold: float = 0.3) -> list[dict[str, Any]]:
+        """Find pairs of opposing claims that reference the same underlying facts.
+
+        Uses TF-IDF cosine similarity between cross-graph claim pairs to
+        identify shared evidence territory.
+
+        Args:
+            similarity_threshold: Minimum similarity to consider claims related.
+
+        Returns:
+            List of dicts with pro_claim, def_claim, similarity, and type.
+        """
+        # Create a combined temporary graph for TF-IDF computation across both sides
+        combined = ArgumentGraph()
+        for cid, data in self.pro._node_data.items():
+            combined.add_claim(
+                f"pro_{cid}", data["statement"],
+                data["evidence"], data["confidence"],
+            )
+        for cid, data in self.defense._node_data.items():
+            combined.add_claim(
+                f"def_{cid}", data["statement"],
+                data["evidence"], data["confidence"],
+            )
+
+        shared_pairs: list[dict[str, Any]] = []
+        for pro_cid in self.pro._node_data:
+            for def_cid in self.defense._node_data:
+                sim = combined.compute_tfidf_similarity(f"pro_{pro_cid}", f"def_{def_cid}")
+                if sim >= similarity_threshold:
+                    pro_is_foundation = self.pro.in_degree(pro_cid) == 0
+                    def_is_foundation = self.defense.in_degree(def_cid) == 0
+
+                    pair_type = "contested_territory"
+                    if pro_is_foundation and def_is_foundation:
+                        pair_type = "contradictory_foundations"
+                    elif pro_is_foundation or def_is_foundation:
+                        pair_type = "foundation_attack"
+
+                    shared_pairs.append({
+                        "pro_claim": pro_cid,
+                        "def_claim": def_cid,
+                        "similarity": round(sim, 4),
+                        "type": pair_type,
+                        "pro_confidence": self.pro._node_data[pro_cid]["confidence"],
+                        "def_confidence": self.defense._node_data[def_cid]["confidence"],
+                    })
+
+        # Sort by similarity (highest first)
+        shared_pairs.sort(key=lambda x: x["similarity"], reverse=True)
+
+        logger.info(
+            "Cross-graph analysis: %d shared evidence pairs found "
+            "(%d contradictory foundations)",
+            len(shared_pairs),
+            sum(1 for p in shared_pairs if p["type"] == "contradictory_foundations"),
+        )
+
+        return shared_pairs
+
+    def analyze(self) -> dict[str, Any]:
+        """Run full cross-graph analysis.
+
+        Returns:
+            Dict with shared evidence pairs and structural summary.
+        """
+        shared = self.find_shared_evidence()
+
+        types_count: dict[str, int] = {}
+        for pair in shared:
+            types_count[pair["type"]] = types_count.get(pair["type"], 0) + 1
+
+        return {
+            "shared_evidence_pairs": shared,
+            "pair_count": len(shared),
+            "types": types_count,
+            "has_contradictory_foundations": types_count.get("contradictory_foundations", 0) > 0,
+        }
+
+
 def build_argument_graphs(
     prosecutor_claims: list[dict],
     defense_claims: list[dict],
@@ -417,6 +558,11 @@ def build_argument_graphs(
     pro_metrics = pro_graph.metrics()
     def_metrics = def_graph.metrics()
 
+    # Cross-graph analysis: find claims from opposing sides that reference
+    # the same underlying facts — the most contested factual territory.
+    cross_analyzer = CrossGraphAnalyzer(pro_graph, def_graph)
+    cross_analysis = cross_analyzer.analyze()
+
     return {
         "prosecution": pro_metrics,
         "defense": def_metrics,
@@ -429,4 +575,5 @@ def build_argument_graphs(
             "pro_has_critical_path": len(pro_metrics["critical_claims"]) > 0,
             "def_has_critical_path": len(def_metrics["critical_claims"]) > 0,
         },
+        "cross_graph": cross_analysis,
     }

@@ -1,0 +1,1 @@
+{"id": "d81f2759-8d27-4f3d-8a6e-7d2251b5e3c6", "decision": {"id": "d81f2759-8d27-4f3d-8a6e-7d2251b5e3c6", "question": "Should we proceed with the investor analysis test?", "context": null, "created_at": "2026-03-29T17:51:01.662489"}, "output_format": "investor", "domain": "financial", "status": "created", "events": [], "result": null, "created_at": "2026-03-29T17:51:01.662500"}

@@ -116,7 +116,7 @@ User Input (question + context + output_format)
 - Verdict sharing: `GET /api/verdict/{id}/share` generates short URL token, `GET /shared/{token}` retrieves results
 - Web search grounding: Research Agent queries Tavily (or DuckDuckGo fallback) for current facts before LLM analysis
 - Inline analysis in session results: argument quality, stability, and dependency graph computed and embedded in every completed session result — no separate endpoint required
-- 446 tests across 22 test files: schemas, graph, API, exports, resilience, cache, middleware, domain config, errors, metrics, security, prompts, integration, graph viz, session FSM, validators, event bus, calibration, LLM helpers (pytest)
+- 458 tests across 22 test files: schemas, graph, API, exports, resilience, cache, middleware, domain config, errors, metrics, security, prompts, integration, graph viz, session FSM, validators, event bus, calibration, LLM helpers (pytest)
 - Input validation on all API request models (question length, context length, format enum)
 - Rate limiting middleware: token bucket per IP with configurable RPM/burst
 - Request timing middleware: X-Request-ID + X-Response-Time headers on all responses
@@ -148,6 +148,8 @@ User Input (question + context + output_format)
 - TF-IDF weighted claim similarity: replaces naive keyword overlap with smoothed TF-IDF cosine similarity for more accurate argument dependency detection
 - Topological sort (Kahn's algorithm): dependency-ordered claim traversal in argument graphs — foundations first, dependents last
 - Platt scaling feedback loop: auto-fits calibration coefficients after 10+ witness records, then applies sigmoid correction to raw agent confidence in future verdicts
+- Cross-graph analysis: `CrossGraphAnalyzer` detects claims from opposing sides that reference the same underlying facts — classifies as contested territory, contradictory foundations, or foundation attacks
+- Structural entropy: Shannon entropy over degree distribution measures how evenly dependencies are distributed across claims — low entropy indicates fragile star topologies with high-impact central claims
 - Argument quality scoring: 5-dimension heuristic assessment (specificity, diversity, calibration, coherence, actionability) with A-D grading — flows through state to inform witness and synthesis behavior
 - Intelligence-driven routing: computed analysis (graph structure, quality scores, stability) persisted in VerdictState and used by downstream nodes for smarter cross-examination, impact-weighted witness prioritization, and stability-aware synthesis with contingency plans
 - Session lifecycle FSM: 5-state machine (created→running→complete/error/expired) with validated transitions wired into API routes

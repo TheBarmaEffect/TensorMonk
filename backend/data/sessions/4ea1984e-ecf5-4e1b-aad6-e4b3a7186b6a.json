@@ -1,0 +1,1 @@
+{"id": "4ea1984e-ecf5-4e1b-aad6-e4b3a7186b6a", "decision": {"id": "4ea1984e-ecf5-4e1b-aad6-e4b3a7186b6a", "question": "Should we migrate our stack to Kubernetes?", "context": null, "created_at": "2026-03-29T17:00:56.390512"}, "output_format": "executive", "domain": "technology", "status": "created", "events": [], "result": null, "created_at": "2026-03-29T17:00:56.390521"}
