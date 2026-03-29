@@ -28,6 +28,11 @@ _llm_circuit_breaker = CircuitBreaker(
 )
 
 
+def get_circuit_breaker_status() -> dict:
+    """Return the circuit breaker status for health checks."""
+    return _llm_circuit_breaker.summary()
+
+
 def parse_llm_json(
     response: str,
     fallback: Optional[dict] = None,
