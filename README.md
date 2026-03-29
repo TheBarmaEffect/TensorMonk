@@ -106,7 +106,7 @@ User Input (question + context + output_format)
 - Confidence-based routing: 3 verdict paths (normal, low-confidence review, hallucination guard at `temperature=0.3`)
 - Hallucination guard — agent outputs validated against Pydantic v2 schemas, malformed JSON triggers `temperature=0.3` retry
 - Real-time WebSocket streaming with typed `StreamEvent` objects
-- Export: Markdown, PDF (via fpdf2), and structured JSON — all endpoints functional
+- Export: Markdown, PDF (via fpdf2), DOCX (via python-docx), and structured JSON — all endpoints functional
 - Follow-up questions: context-aware Q&A against session results via `POST /api/verdict/{id}/followup`
 - Session history: in-memory session list via `GET /api/verdict/sessions/history`, displayed in frontend `SessionHistory` component
 
@@ -121,6 +121,7 @@ User Input (question + context + output_format)
 - Output format selector (Executive, Technical, Legal, Investor)
 - Domain badge auto-detected as user types
 - Voice input via Web Speech API — mic button with animated waveform indicator, transcript streams into text input
+- Analytics panel: Recharts BarChart (claim confidence), RadarChart (argument comparison), StatCards, witness verdicts — wired to live agent data
 
 **Deployment**
 - Frontend live on Vercel: [https://frontend-phi-ten-83.vercel.app](https://frontend-phi-ten-83.vercel.app)
@@ -135,11 +136,11 @@ Tier 2 cut rule: *"analytics charts are cut before the courtroom UI is degraded.
 
 | Feature | Status | Reason for cut |
 |---------|--------|----------------|
-| Recharts analytics panel | Component scaffolded, not wired to live data | Courtroom UI polish prioritized over charts |
+| Recharts analytics panel | ✅ Functional — `AnalyticsPanel.jsx` wired to live `agentStates`, `verdict`, `synthesis` | Moved to Tier 1 |
 | Verdict history persistence | In-memory only, resets on restart | Redis persistence deferred to post-hackathon |
 | Voice input | ✅ Functional — `MicButton.jsx` + `useVoiceInput.js` | Moved to Tier 1; works in Chrome/Edge |
 | Verdict sharing URL | Not implemented | Time constraint |
-| DOCX export | Not implemented | PDF + Markdown + JSON sufficient for demo |
+| DOCX export | ✅ Functional — `GET /api/verdict/{id}/export/docx` | Moved to Tier 1 |
 
 ## Quick Start
 
@@ -200,6 +201,7 @@ docker-compose up --build
 | `GET` | `/api/verdict/{id}/export/markdown` | Export as Markdown report |
 | `GET` | `/api/verdict/{id}/export/pdf` | Export as formatted PDF |
 | `GET` | `/api/verdict/{id}/export/json` | Export as structured JSON |
+| `GET` | `/api/verdict/{id}/export/docx` | Export as formatted DOCX |
 | `POST` | `/api/verdict/{id}/followup` | Context-aware follow-up Q&A |
 | `GET` | `/health` | Health check |
 
