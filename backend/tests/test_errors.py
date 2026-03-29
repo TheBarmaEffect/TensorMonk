@@ -121,3 +121,13 @@ class TestErrorCodes:
         err = VerdictError("test")
         d = err.to_dict()
         assert "code" not in d
+
+    def test_agent_error_codes_start_with_e1(self):
+        agent_codes = {k: v for k, v in ERROR_CODES.items() if "agent" in k.lower() or "llm" in k.lower() or "parse" in k.lower()}
+        for name, code in agent_codes.items():
+            assert code.startswith("E1"), f"{name} should be E1xxx (agent errors)"
+
+    def test_session_error_codes_start_with_e2(self):
+        session_codes = {k: v for k, v in ERROR_CODES.items() if "session" in k.lower()}
+        for name, code in session_codes.items():
+            assert code.startswith("E2"), f"{name} should be E2xxx (session errors)"
