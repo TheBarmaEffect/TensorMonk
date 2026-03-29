@@ -17,9 +17,10 @@ def generate_markdown_report(session_data: dict) -> str:
     output_format = session_data.get("output_format", "executive")
     domain = session_data.get("domain", "business")
 
-    lines = []
-        if not session_data:
+    if not session_data:
         return "# VERDICT — No Data Available\n\nSession has no results yet."
+
+    lines = []
     lines.append("# VERDICT — AI Courtroom Analysis Report")
     lines.append(f"\n**Decision:** {decision.get('question', 'N/A')}")
     lines.append(f"**Date:** {datetime.utcnow().strftime('%B %d, %Y')}")
