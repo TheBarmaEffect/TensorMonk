@@ -118,7 +118,8 @@ All Tier 2 features were moved to functional status. The courtroom UI was never 
 | test_integration.py | 22 | Session lifecycle, domain detection, analytics flow |
 | test_graph_viz.py | 17 | Pipeline topology, witness nodes, routing paths |
 | test_session_manager.py | 23 | FSM state transitions, lifecycle tracking, serialization |
-| **Total** | **212** | |
+| test_validators.py | 22 | Question quality, research completeness, format-domain fit |
+| **Total** | **234** | |
 
 ## Technical Decisions
 
