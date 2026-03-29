@@ -144,7 +144,9 @@ User Input (question + context + output_format)
 - Argument dependency graph: DAG of claim dependencies with BFS cascading impact, coherence scoring, critical path detection
 - Verdict stability analysis: Monte Carlo perturbation testing (50 runs, ±10% witness confidence) with evidence margin and flip rate
 - Argument quality scoring: 5-dimension heuristic assessment (specificity, diversity, calibration, coherence, actionability) with A-D grading
-- Domain-aware input validators: question quality scoring, research package completeness, format-domain compatibility
+- Session lifecycle FSM: 5-state machine (created→running→complete/error/expired) with validated transitions wired into API routes
+- Domain-aware input validators: question quality scoring, research package completeness, format-domain compatibility — wired into API and pipeline
+- Quality-aware synthesis: argument quality scores feed into the synthesis prompt, weighting the stronger side's arguments
 - py.typed PEP 561 marker for static type checking support
 
 **Frontend (fully functional)**
