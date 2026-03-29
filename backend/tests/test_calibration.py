@@ -252,3 +252,46 @@ class TestIsotonicRegression:
         probs = result["calibrated_probabilities"]
         for i in range(len(probs) - 1):
             assert probs[i] <= probs[i + 1] + 0.001  # Monotone
+
+
+class TestCalibrationTrackerAutoFit:
+    """Test auto-fit and recalibration detection."""
+
+    def test_auto_fit_skips_low_sample_agents(self):
+        tracker = CalibrationTracker()
+        for _ in range(5):
+            tracker.record("weak_agent", "business", 0.8, True)
+        results = tracker.auto_fit_all(min_samples=10)
+        assert "weak_agent" not in results
+
+    def test_auto_fit_fits_sufficient_agents(self):
+        tracker = CalibrationTracker()
+        for _ in range(15):
+            tracker.record("good_agent", "business", 0.8, True)
+        for _ in range(5):
+            tracker.record("good_agent", "business", 0.3, False)
+        results = tracker.auto_fit_all(min_samples=10)
+        assert "good_agent" in results
+        assert results["good_agent"]["fitted"] is True
+
+    def test_needs_recalibration_false_for_unknown(self):
+        tracker = CalibrationTracker()
+        assert tracker.needs_recalibration("nonexistent") is False
+
+    def test_needs_recalibration_true_for_high_ece(self):
+        tracker = CalibrationTracker()
+        # Create an overconfident agent: says 0.9 but only 50% correct
+        for _ in range(10):
+            tracker.record("overconfident", "business", 0.9, True)
+        for _ in range(10):
+            tracker.record("overconfident", "business", 0.9, False)
+        assert tracker.needs_recalibration("overconfident", ece_threshold=0.05) is True
+
+    def test_summary_includes_recalibration_list(self):
+        tracker = CalibrationTracker()
+        for _ in range(10):
+            tracker.record("agent_a", "business", 0.9, True)
+        for _ in range(10):
+            tracker.record("agent_a", "business", 0.9, False)
+        summary = tracker.summary()
+        assert "recalibration_needed" in summary
