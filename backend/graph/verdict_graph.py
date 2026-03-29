@@ -39,6 +39,7 @@ from agents.synthesis import SynthesisAgent
 from models.schemas import StreamEvent
 from config.domain_config import get_constitutional_overlay, get_evidence_hierarchy
 from utils.event_bus import pipeline_event_bus, PipelineEvent, EventPriority
+from utils.metrics import pipeline_metrics
 
 
 def strip_authorship(research_package: dict) -> dict:
@@ -115,19 +116,28 @@ async def research_node(state: VerdictState) -> dict:
     callback = _callback_registry.get(state.get("thread_id", ""))
     output_format = state.get("output_format", "executive")
     domain = state.get("domain", "business")
+    tid = state.get("thread_id", "")
 
-    try:
-        package = await agent.run(
-            decision_question=decision["question"],
-            context=decision.get("context"),
-            output_format=output_format,
-            domain=domain,
-            stream_callback=callback,
-        )
-        return {"research_package": package}
-    except Exception as e:
-        logger.error("Research node failed: %s", e)
-        return {"research_package": {}, "errors": [f"Research: {str(e)}"]}
+    with pipeline_metrics.track("research"):
+        try:
+            await pipeline_event_bus.publish(PipelineEvent(
+                topic="agent.research.start", session_id=tid,
+            ))
+            package = await agent.run(
+                decision_question=decision["question"],
+                context=decision.get("context"),
+                output_format=output_format,
+                domain=domain,
+                stream_callback=callback,
+            )
+            await pipeline_event_bus.publish(PipelineEvent(
+                topic="agent.research.complete", session_id=tid,
+                payload={"quality": package.get("_quality_scores", {}).get("overall", 0)},
+            ))
+            return {"research_package": package}
+        except Exception as e:
+            logger.error("Research node failed: %s", e)
+            return {"research_package": {}, "errors": [f"Research: {str(e)}"]}
 
 
 async def prosecutor_node(state: VerdictState) -> dict:
@@ -143,19 +153,32 @@ async def prosecutor_node(state: VerdictState) -> dict:
     callback = _callback_registry.get(state.get("thread_id", ""))
     output_format = state.get("output_format", "executive")
     domain = state.get("domain", "business")
+    tid = state.get("thread_id", "")
 
-    try:
-        argument = await agent.run(
-            decision_question=decision["question"],
-            research_package=research,
-            output_format=output_format,
-            domain=domain,
-            stream_callback=callback,
-        )
-        return {"prosecutor_argument": argument.model_dump(mode="json")}
-    except Exception as e:
-        logger.error("Prosecutor node failed: %s", e)
-        return {"prosecutor_argument": None, "errors": [f"Prosecutor: {str(e)}"]}
+    with pipeline_metrics.track("prosecutor"):
+        try:
+            await pipeline_event_bus.publish(PipelineEvent(
+                topic="agent.prosecutor.start", session_id=tid,
+            ))
+            argument = await agent.run(
+                decision_question=decision["question"],
+                research_package=research,
+                output_format=output_format,
+                domain=domain,
+                stream_callback=callback,
+            )
+            await pipeline_event_bus.publish(PipelineEvent(
+                topic="agent.prosecutor.complete", session_id=tid,
+                payload={"confidence": argument.confidence, "claim_count": len(argument.claims)},
+            ))
+            return {"prosecutor_argument": argument.model_dump(mode="json")}
+        except Exception as e:
+            logger.error("Prosecutor node failed: %s", e)
+            await pipeline_event_bus.publish(PipelineEvent(
+                topic="agent.prosecutor.error", session_id=tid,
+                payload={"error": str(e)}, priority=EventPriority.HIGH,
+            ))
+            return {"prosecutor_argument": None, "errors": [f"Prosecutor: {str(e)}"]}
 
 
 async def defense_node(state: VerdictState) -> dict:
@@ -171,19 +194,32 @@ async def defense_node(state: VerdictState) -> dict:
     callback = _callback_registry.get(state.get("thread_id", ""))
     output_format = state.get("output_format", "executive")
     domain = state.get("domain", "business")
+    tid = state.get("thread_id", "")
 
-    try:
-        argument = await agent.run(
-            decision_question=decision["question"],
-            research_package=research,
-            output_format=output_format,
-            domain=domain,
-            stream_callback=callback,
-        )
-        return {"defense_argument": argument.model_dump(mode="json")}
-    except Exception as e:
-        logger.error("Defense node failed: %s", e)
-        return {"defense_argument": None, "errors": [f"Defense: {str(e)}"]}
+    with pipeline_metrics.track("defense"):
+        try:
+            await pipeline_event_bus.publish(PipelineEvent(
+                topic="agent.defense.start", session_id=tid,
+            ))
+            argument = await agent.run(
+                decision_question=decision["question"],
+                research_package=research,
+                output_format=output_format,
+                domain=domain,
+                stream_callback=callback,
+            )
+            await pipeline_event_bus.publish(PipelineEvent(
+                topic="agent.defense.complete", session_id=tid,
+                payload={"confidence": argument.confidence, "claim_count": len(argument.claims)},
+            ))
+            return {"defense_argument": argument.model_dump(mode="json")}
+        except Exception as e:
+            logger.error("Defense node failed: %s", e)
+            await pipeline_event_bus.publish(PipelineEvent(
+                topic="agent.defense.error", session_id=tid,
+                payload={"error": str(e)}, priority=EventPriority.HIGH,
+            ))
+            return {"defense_argument": None, "errors": [f"Defense: {str(e)}"]}
 
 
 async def parallel_arguments_node(state: VerdictState) -> dict:
@@ -222,18 +258,31 @@ async def judge_cross_exam_node(state: VerdictState) -> dict:
 
     pro_arg = Argument(**pro_data)
     def_arg = Argument(**def_data)
+    tid = state.get("thread_id", "")
 
-    try:
-        contested = await judge.cross_examine(
-            decision_question=decision["question"],
-            prosecutor_argument=pro_arg,
-            defense_argument=def_arg,
-            stream_callback=callback,
-        )
-        return {"contested_claims": contested}
-    except Exception as e:
-        logger.error("Judge cross-exam failed: %s", e)
-        return {"contested_claims": [], "errors": [f"Cross-exam: {str(e)}"]}
+    with pipeline_metrics.track("judge_cross_exam"):
+        try:
+            await pipeline_event_bus.publish(PipelineEvent(
+                topic="agent.judge.cross_exam.start", session_id=tid,
+            ))
+            contested = await judge.cross_examine(
+                decision_question=decision["question"],
+                prosecutor_argument=pro_arg,
+                defense_argument=def_arg,
+                stream_callback=callback,
+            )
+            await pipeline_event_bus.publish(PipelineEvent(
+                topic="agent.judge.cross_exam.complete", session_id=tid,
+                payload={"contested_count": len(contested)},
+            ))
+            return {"contested_claims": contested}
+        except Exception as e:
+            logger.error("Judge cross-exam failed: %s", e)
+            await pipeline_event_bus.publish(PipelineEvent(
+                topic="agent.judge.cross_exam.error", session_id=tid,
+                payload={"error": str(e)}, priority=EventPriority.HIGH,
+            ))
+            return {"contested_claims": [], "errors": [f"Cross-exam: {str(e)}"]}
 
 
 async def witness_node(state: VerdictState) -> dict:
@@ -241,6 +290,8 @@ async def witness_node(state: VerdictState) -> dict:
     witness_agent = WitnessAgent()
     contested = state.get("contested_claims", [])
     callback = _callback_registry.get(state.get("thread_id", ""))
+
+    tid = state.get("thread_id", "")
 
     if not contested:
         return {"witness_reports": []}
@@ -276,21 +327,42 @@ async def witness_node(state: VerdictState) -> dict:
             stream_callback=callback,
         )
 
-    try:
-        tasks = [verify_one(cc) for cc in contested[:3]]  # Max 3 witnesses
-        reports = await asyncio.gather(*tasks, return_exceptions=True)
+    with pipeline_metrics.track("witnesses"):
+        try:
+            await pipeline_event_bus.publish(PipelineEvent(
+                topic="agent.witnesses.start", session_id=tid,
+                payload={"count": len(contested[:3])},
+            ))
+            tasks = [verify_one(cc) for cc in contested[:3]]  # Max 3 witnesses
+            reports = await asyncio.gather(*tasks, return_exceptions=True)
 
-        valid_reports = []
-        for r in reports:
-            if isinstance(r, Exception):
-                logger.error("Witness failed: %s", r)
-            else:
-                valid_reports.append(r.model_dump(mode="json"))
+            valid_reports = []
+            for r in reports:
+                if isinstance(r, Exception):
+                    logger.error("Witness failed: %s", r)
+                else:
+                    valid_reports.append(r.model_dump(mode="json"))
 
-        return {"witness_reports": valid_reports}
-    except Exception as e:
-        logger.error("Witness node failed: %s", e)
-        return {"witness_reports": [], "errors": [f"Witnesses: {str(e)}"]}
+            avg_confidence = (
+                sum(r.get("confidence", 0.5) for r in valid_reports) / len(valid_reports)
+                if valid_reports else 0.0
+            )
+            await pipeline_event_bus.publish(PipelineEvent(
+                topic="agent.witnesses.complete", session_id=tid,
+                payload={
+                    "verified": len(valid_reports),
+                    "failed": len(reports) - len(valid_reports),
+                    "avg_confidence": round(avg_confidence, 3),
+                },
+            ))
+            return {"witness_reports": valid_reports}
+        except Exception as e:
+            logger.error("Witness node failed: %s", e)
+            await pipeline_event_bus.publish(PipelineEvent(
+                topic="agent.witnesses.error", session_id=tid,
+                payload={"error": str(e)}, priority=EventPriority.HIGH,
+            ))
+            return {"witness_reports": [], "errors": [f"Witnesses: {str(e)}"]}
 
 
 async def _run_verdict(state: VerdictState, use_low_temp: bool = False) -> dict:
@@ -300,6 +372,7 @@ async def _run_verdict(state: VerdictState, use_low_temp: bool = False) -> dict:
     judge = JudgeAgent()
     decision = state["decision"]
     callback = _callback_registry.get(state.get("thread_id", ""))
+    tid = state.get("thread_id", "")
 
     pro_data = state.get("prosecutor_argument")
     def_data = state.get("defense_argument")
@@ -316,19 +389,37 @@ async def _run_verdict(state: VerdictState, use_low_temp: bool = False) -> dict:
         logger.info("Hallucination guard active: overriding judge temperature to 0.3")
         judge.llm.temperature = 0.3
 
-    try:
-        verdict = await judge.deliver_verdict(
-            decision_question=decision["question"],
-            prosecutor_argument=pro_arg,
-            defense_argument=def_arg,
-            witness_reports=reports,
-            decision_id=decision["id"],
-            stream_callback=callback,
-        )
-        return {"verdict": verdict.model_dump(mode="json")}
-    except Exception as e:
-        logger.error("Judge verdict failed: %s", e)
-        return {"verdict": None, "errors": [f"Verdict: {str(e)}"]}
+    verdict_path = "low_temp" if use_low_temp else "normal"
+    with pipeline_metrics.track("verdict"):
+        try:
+            await pipeline_event_bus.publish(PipelineEvent(
+                topic="agent.judge.verdict.start", session_id=tid,
+                payload={"path": verdict_path, "witness_count": len(reports)},
+            ))
+            verdict = await judge.deliver_verdict(
+                decision_question=decision["question"],
+                prosecutor_argument=pro_arg,
+                defense_argument=def_arg,
+                witness_reports=reports,
+                decision_id=decision["id"],
+                stream_callback=callback,
+            )
+            await pipeline_event_bus.publish(PipelineEvent(
+                topic="agent.judge.verdict.complete", session_id=tid,
+                payload={
+                    "ruling": verdict.ruling,
+                    "confidence": verdict.confidence,
+                    "path": verdict_path,
+                },
+            ))
+            return {"verdict": verdict.model_dump(mode="json")}
+        except Exception as e:
+            logger.error("Judge verdict failed: %s", e)
+            await pipeline_event_bus.publish(PipelineEvent(
+                topic="agent.judge.verdict.error", session_id=tid,
+                payload={"error": str(e)}, priority=EventPriority.HIGH,
+            ))
+            return {"verdict": None, "errors": [f"Verdict: {str(e)}"]}
 
 
 async def judge_verdict_node(state: VerdictState) -> dict:
@@ -398,22 +489,40 @@ async def synthesis_node(state: VerdictState) -> dict:
     reports = [WitnessReport(**w) for w in state.get("witness_reports", [])]
     verdict = VerdictResult(**verdict_data)
 
-    try:
-        synthesis = await agent.run(
-            decision_question=decision["question"],
-            research_package=state.get("research_package", {}),
-            prosecutor_argument=pro_arg,
-            defense_argument=def_arg,
-            witness_reports=reports,
-            verdict=verdict,
-            output_format=output_format,
-            domain=domain,
-            stream_callback=callback,
-        )
-        return {"synthesis": synthesis.model_dump(mode="json")}
-    except Exception as e:
-        logger.error("Synthesis node failed: %s", e)
-        return {"synthesis": None, "errors": [f"Synthesis: {str(e)}"]}
+    tid = state.get("thread_id", "")
+
+    with pipeline_metrics.track("synthesis"):
+        try:
+            await pipeline_event_bus.publish(PipelineEvent(
+                topic="agent.synthesis.start", session_id=tid,
+            ))
+            synthesis = await agent.run(
+                decision_question=decision["question"],
+                research_package=state.get("research_package", {}),
+                prosecutor_argument=pro_arg,
+                defense_argument=def_arg,
+                witness_reports=reports,
+                verdict=verdict,
+                output_format=output_format,
+                domain=domain,
+                stream_callback=callback,
+            )
+            await pipeline_event_bus.publish(PipelineEvent(
+                topic="agent.synthesis.complete", session_id=tid,
+                payload={
+                    "strength_score": synthesis.strength_score,
+                    "actions_count": len(synthesis.recommended_actions),
+                    "objections_addressed": len(synthesis.addressed_objections),
+                },
+            ))
+            return {"synthesis": synthesis.model_dump(mode="json")}
+        except Exception as e:
+            logger.error("Synthesis node failed: %s", e)
+            await pipeline_event_bus.publish(PipelineEvent(
+                topic="agent.synthesis.error", session_id=tid,
+                payload={"error": str(e)}, priority=EventPriority.HIGH,
+            ))
+            return {"synthesis": None, "errors": [f"Synthesis: {str(e)}"]}
 
 
 # ── Build the graph ─────────────────────────────────────────────────────────
