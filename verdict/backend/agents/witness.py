@@ -102,7 +102,7 @@ class WitnessAgent:
                 claim_id=claim_id,
                 witness_type=witness_type,
                 resolution=data.get("resolution", full_response[:500]),
-                confidence=min(max(float(data.get("confidence", 0.5)), 0.0), 1.0),
+                confidence=round(min(max(float(data.get("confidence", 0.5)), 0.0), 1.0), 4),
                 verdict_on_claim=normalized_verdict,
             )
 
