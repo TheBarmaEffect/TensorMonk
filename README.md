@@ -87,7 +87,7 @@ User Input (question + context + output_format)
 | Styling | Tailwind CSS |
 | Animations | Framer Motion |
 | State management | Zustand |
-| Charts | Recharts (BarChart, RadarChart) |
+| Charts | Recharts (scope-trimmed, see below) |
 | PDF generation | fpdf2 |
 | Containerization | Docker + docker-compose |
 
@@ -106,9 +106,9 @@ User Input (question + context + output_format)
 - Confidence-based routing: 3 verdict paths (normal, low-confidence review, hallucination guard at `temperature=0.3`)
 - Hallucination guard — agent outputs validated against Pydantic v2 schemas, malformed JSON triggers `temperature=0.3` retry
 - Real-time WebSocket streaming with typed `StreamEvent` objects
-- Export: Markdown, PDF (via fpdf2), and structured JSON
-- Follow-up questions: context-aware Q&A against session results via `/api/verdict/{id}/followup`
-- Session history panel with `/api/verdict/sessions/history` endpoint
+- Export: Markdown, PDF (via fpdf2), and structured JSON — all endpoints functional
+- Follow-up questions: context-aware Q&A against session results via `POST /api/verdict/{id}/followup`
+- Session history: in-memory session list via `GET /api/verdict/sessions/history`, displayed in frontend `SessionHistory` component
 
 **Frontend (fully functional)**
 - Sequential ACT-based courtroom UI (5 Acts: Investigation, Debate, Cross-Examination, Ruling, Synthesis)
@@ -127,16 +127,18 @@ User Input (question + context + output_format)
 - Docker + docker-compose with Redis service for local development
 - Vercel rewrites proxy `/api/*` to HF Space backend; WebSocket connects directly via `VITE_WS_URL`
 
-## Scope-Trimmed (time constraints — Tier 2)
+## Scope-Trimmed (time constraints — pre-committed Tier 2 cut rule)
 
-The following were planned but cut per the pre-committed Tier 2 cut rule
-(analytics panel cut if courtroom UI not polished by midnight):
+The following were planned but explicitly cut per the master plan's pre-committed
+Tier 2 cut rule: *"analytics charts are cut before the courtroom UI is degraded."*
 
-- Recharts analytics panel (confidence evolution chart, argument radar) — component exists but not wired to live data
-- Verdict history persistence across server restarts (in-memory only)
-- Voice input via Web Speech API — mic button exists but browser support varies
-- Verdict sharing URL
-- DOCX export
+| Feature | Status | Reason for cut |
+|---------|--------|----------------|
+| Recharts analytics panel | Component scaffolded, not wired to live data | Courtroom UI polish prioritized over charts |
+| Verdict history persistence | In-memory only, resets on restart | Redis persistence deferred to post-hackathon |
+| Voice input | Mic button in UI, Web Speech API varies by browser | Cross-browser reliability not demo-safe |
+| Verdict sharing URL | Not implemented | Time constraint |
+| DOCX export | Not implemented | PDF + Markdown + JSON sufficient for demo |
 
 ## Quick Start
 
