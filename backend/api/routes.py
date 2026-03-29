@@ -1,10 +1,13 @@
 """FastAPI routes for the Verdict API — REST + WebSocket endpoints."""
 
 import asyncio
+import hashlib
 import json
 import logging
+import os
 import uuid
 from datetime import datetime
+from pathlib import Path
 from typing import Optional, Literal
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, HTTPException
@@ -20,8 +23,58 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/verdict")
 
-# In-memory session store
+# ---------------------------------------------------------------------------
+# Session persistence — JSON file store with in-memory cache
+# ---------------------------------------------------------------------------
+
+SESSION_DIR = Path(os.getenv("SESSION_DIR", "data/sessions"))
+SESSION_DIR.mkdir(parents=True, exist_ok=True)
+
+# In-memory session cache backed by JSON file persistence
 sessions: dict[str, dict] = {}
+
+
+def _persist_session(session_id: str, session: dict) -> None:
+    """Write session to disk as JSON for persistence across restarts."""
+    try:
+        path = SESSION_DIR / f"{session_id}.json"
+        with open(path, "w") as f:
+            json.dump(session, f, default=str)
+    except Exception as e:
+        logger.warning("Failed to persist session %s: %s", session_id, e)
+
+
+def _load_session(session_id: str) -> Optional[dict]:
+    """Load a session from disk if not in memory cache."""
+    path = SESSION_DIR / f"{session_id}.json"
+    if path.exists():
+        try:
+            with open(path) as f:
+                session = json.load(f)
+            sessions[session_id] = session  # Warm the cache
+            return session
+        except Exception as e:
+            logger.warning("Failed to load session %s: %s", session_id, e)
+    return None
+
+
+def _get_session(session_id: str) -> Optional[dict]:
+    """Get session from cache or disk."""
+    if session_id in sessions:
+        return sessions[session_id]
+    return _load_session(session_id)
+
+
+def _load_all_sessions() -> None:
+    """Load all persisted sessions into memory on startup."""
+    for path in SESSION_DIR.glob("*.json"):
+        sid = path.stem
+        if sid not in sessions:
+            _load_session(sid)
+
+
+# Load persisted sessions on module import
+_load_all_sessions()
 
 # Valid output formats and their descriptions
 OUTPUT_FORMATS = {
@@ -163,6 +216,7 @@ async def start_verdict(request: StartRequest):
         "created_at": datetime.utcnow().isoformat(),
     }
     sessions[decision.id] = session
+    _persist_session(decision.id, session)
 
     logger.info(
         "Session created: %s — %s [format=%s, domain=%s]",
@@ -218,7 +272,7 @@ async def get_history():
 @router.get("/{session_id}/status")
 async def get_status(session_id: str):
     """Get the current status of a verdict session."""
-    session = sessions.get(session_id)
+    session = _get_session(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
 
@@ -233,7 +287,7 @@ async def get_status(session_id: str):
 @router.get("/{session_id}/result")
 async def get_result(session_id: str):
     """Get the complete result of a verdict session."""
-    session = sessions.get(session_id)
+    session = _get_session(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
 
@@ -257,7 +311,7 @@ async def stream_verdict(websocket: WebSocket, session_id: str):
     await websocket.accept()
     logger.info("WebSocket connected: %s", session_id)
 
-    session = sessions.get(session_id)
+    session = _get_session(session_id)
     if not session:
         await websocket.send_json({"error": "Session not found"})
         await websocket.close()
@@ -298,6 +352,7 @@ async def stream_verdict(websocket: WebSocket, session_id: str):
             }
 
             session["status"] = "complete"
+            _persist_session(session_id, session)
         except Exception as e:
             logger.error("Pipeline failed: %s", str(e))
             session["status"] = "error"
@@ -348,7 +403,7 @@ async def stream_verdict(websocket: WebSocket, session_id: str):
 @router.get("/{session_id}/export/markdown")
 async def export_markdown(session_id: str):
     """Export the verdict session as a markdown report."""
-    session = sessions.get(session_id)
+    session = _get_session(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
     if not session.get("result"):
@@ -361,7 +416,7 @@ async def export_markdown(session_id: str):
 @router.get("/{session_id}/export/json")
 async def export_json(session_id: str):
     """Export the verdict session as structured JSON."""
-    session = sessions.get(session_id)
+    session = _get_session(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
     if not session.get("result"):
@@ -374,7 +429,7 @@ async def export_json(session_id: str):
 @router.get("/{session_id}/export/pdf")
 async def export_pdf(session_id: str):
     """Export the verdict session as a formatted PDF report."""
-    session = sessions.get(session_id)
+    session = _get_session(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
     if not session.get("result"):
@@ -391,7 +446,7 @@ async def export_pdf(session_id: str):
 @router.get("/{session_id}/export/docx")
 async def export_docx(session_id: str):
     """Export the verdict session as a formatted DOCX report."""
-    session = sessions.get(session_id)
+    session = _get_session(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
     if not session.get("result"):
@@ -417,7 +472,7 @@ class FollowUpRequest(BaseModel):
 @router.post("/{session_id}/followup")
 async def followup_question(session_id: str, request: FollowUpRequest):
     """Ask a follow-up question about the verdict session."""
-    session = sessions.get(session_id)
+    session = _get_session(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
     if not session.get("result"):
@@ -467,3 +522,78 @@ Tailor your response to the {output_format} format and {domain} domain."""),
         return {"answer": response.content, "session_id": session_id}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to generate follow-up: {str(e)}")
+
+
+# ---------------------------------------------------------------------------
+# Verdict sharing endpoint
+# ---------------------------------------------------------------------------
+
+
+def _generate_share_token(session_id: str) -> str:
+    """Generate a short, URL-safe share token from a session ID."""
+    return hashlib.sha256(session_id.encode()).hexdigest()[:12]
+
+
+@router.get("/{session_id}/share")
+async def create_share_link(session_id: str):
+    """Generate a shareable link for a completed verdict session.
+
+    Returns a short share token that can be used to retrieve the session
+    results without needing the full session ID.
+    """
+    session = _get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if not session.get("result"):
+        raise HTTPException(status_code=202, detail="Session not complete")
+
+    token = _generate_share_token(session_id)
+
+    # Store mapping from share token to session ID
+    session["share_token"] = token
+    _persist_session(session_id, session)
+
+    return {
+        "share_token": token,
+        "share_url": f"/shared/{token}",
+        "session_id": session_id,
+    }
+
+
+@router.get("/shared/{share_token}")
+async def get_shared_verdict(share_token: str):
+    """Retrieve a verdict session via its share token.
+
+    This allows anyone with the share link to view the verdict results
+    without needing the original session ID.
+    """
+    # Search for session with matching share token
+    for sid, session in sessions.items():
+        if session.get("share_token") == share_token:
+            if not session.get("result"):
+                raise HTTPException(status_code=202, detail="Session not complete")
+            return {
+                "session_id": sid,
+                "question": session["decision"].get("question", ""),
+                "domain": session.get("domain", "business"),
+                "output_format": session.get("output_format", "executive"),
+                "result": session["result"],
+            }
+
+    # Also check persisted sessions on disk
+    for path in SESSION_DIR.glob("*.json"):
+        try:
+            with open(path) as f:
+                session = json.load(f)
+            if session.get("share_token") == share_token:
+                return {
+                    "session_id": path.stem,
+                    "question": session.get("decision", {}).get("question", ""),
+                    "domain": session.get("domain", "business"),
+                    "output_format": session.get("output_format", "executive"),
+                    "result": session.get("result"),
+                }
+        except Exception:
+            continue
+
+    raise HTTPException(status_code=404, detail="Shared verdict not found")
