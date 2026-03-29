@@ -5,7 +5,7 @@ import json
 from datetime import datetime
 
 
-def generate_markdown_report(session_data: dict) -> str:
+def generate_markdown_report(session_data: dict) -> str:  # noqa: C901
     """Generate a comprehensive markdown report from session data."""
     decision = session_data.get("decision", {})
     research = session_data.get("research_package", {})
