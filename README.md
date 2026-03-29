@@ -116,7 +116,7 @@ User Input (question + context + output_format)
 - Verdict sharing: `GET /api/verdict/{id}/share` generates short URL token, `GET /shared/{token}` retrieves results
 - Web search grounding: Research Agent queries Tavily (or DuckDuckGo fallback) for current facts before LLM analysis
 - Inline analysis in session results: argument quality, stability, and dependency graph computed and embedded in every completed session result — no separate endpoint required
-- 389 tests across 22 test files: schemas, graph, API, exports, resilience, cache, middleware, domain config, errors, metrics, security, prompts, integration, graph viz, session FSM, validators, event bus, calibration, LLM helpers (pytest)
+- 395 tests across 22 test files: schemas, graph, API, exports, resilience, cache, middleware, domain config, errors, metrics, security, prompts, integration, graph viz, session FSM, validators, event bus, calibration, LLM helpers (pytest)
 - Input validation on all API request models (question length, context length, format enum)
 - Rate limiting middleware: token bucket per IP with configurable RPM/burst
 - Request timing middleware: X-Request-ID + X-Response-Time headers on all responses
