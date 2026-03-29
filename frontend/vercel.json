@@ -6,7 +6,7 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://verdict-api.up.railway.app/api/:path*"
+      "destination": "https://shani987-verdict-api.hf.space/api/:path*"
     }
   ],
   "headers": [

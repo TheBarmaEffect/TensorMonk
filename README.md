@@ -123,9 +123,9 @@ User Input (question + context + output_format)
 
 **Deployment**
 - Frontend live on Vercel: [https://frontend-phi-ten-83.vercel.app](https://frontend-phi-ten-83.vercel.app)
-- Backend: Docker + docker-compose with Redis service
-- Railway config (`railway.toml` + `Procfile`) for backend API deployment
-- Vercel rewrites proxy `/api/*` to backend; WebSocket connects directly via `VITE_WS_URL`
+- Backend API live on Hugging Face Spaces: [https://shani987-verdict-api.hf.space](https://shani987-verdict-api.hf.space)
+- Docker + docker-compose with Redis service for local development
+- Vercel rewrites proxy `/api/*` to HF Space backend; WebSocket connects directly via `VITE_WS_URL`
 
 ## Scope-Trimmed (time constraints — Tier 2)
 
