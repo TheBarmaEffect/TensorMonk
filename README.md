@@ -102,7 +102,7 @@ User Input (question + context + output_format)
 - Constitutional isolation — Prosecutor and Defense share zero memory
 - Authorship blindness — Judge receives arguments with agent identity stripped via `strip_authorship()`
 - Dynamic Witness spawning — Judge spawns FactWitness, DataWitness, PrecedentWitness based on contested claims via LangGraph conditional edges
-- Domain detection — auto-classifies startup / legal / medical / financial / technical / hiring
+- Domain detection — auto-classifies business / financial / legal / medical / hiring / technology / strategic / product / marketing (9 domains)
 - Domain-aware constitutional overlays loaded from `backend/config/domains.yaml` at runtime
 - Few-shot synthesis anchors per domain (e.g., "Week 1-2: Implement WorkOS for enterprise SSO")
 - Parallel Prosecutor + Defense execution via `asyncio.gather`
