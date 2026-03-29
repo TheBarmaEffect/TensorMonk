@@ -73,7 +73,7 @@ Build a **multi-agent adversarial AI courtroom** that takes any decision or idea
 | Session analytics aggregation | ✅ | `GET /sessions/analytics` endpoint |
 | Keyboard shortcuts | ✅ | `useKeyboardShortcuts.js` with 6 shortcuts |
 | ARIA accessibility | ✅ | roles, labels, described-by across components |
-| 212 tests (unit + integration) | ✅ | 15 test files (pytest) |
+| 234 tests (unit + integration) | ✅ | 16 test files (pytest) |
 
 ### Pre-Committed Cut Rule
 > "Analytics charts are cut before the courtroom UI is degraded."
