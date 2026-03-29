@@ -15,10 +15,8 @@ import os
 from typing import Callable, Optional
 
 import httpx
-from langchain_groq import ChatGroq
 from langchain_core.messages import SystemMessage, HumanMessage
 
-from config import settings
 from models.schemas import StreamEvent
 from utils.resilience import retry_with_backoff
 from utils.llm_helpers import parse_llm_json, emit_thinking_phases, create_llm
