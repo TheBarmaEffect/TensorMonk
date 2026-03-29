@@ -2,12 +2,19 @@
 
 Constitutional role: Strictly neutral. Authorship is hidden from adversarial agents.
 The research package is the ONLY shared context between Prosecutor and Defense.
+
+Grounding: When available, the agent performs lightweight web retrieval via
+DuckDuckGo Instant Answers and (optionally) Tavily Search API to ground
+claims in current factual data rather than relying solely on LLM training data.
 """
 
+import asyncio
 import json
 import logging
+import os
 from typing import Callable, Optional
 
+import httpx
 from langchain_groq import ChatGroq
 from langchain_core.messages import SystemMessage, HumanMessage
 
@@ -15,6 +22,71 @@ from config import settings
 from models.schemas import StreamEvent
 
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Lightweight web retrieval for factual grounding
+# ---------------------------------------------------------------------------
+
+async def _web_search_grounding(query: str, max_results: int = 3) -> list[str]:
+    """Retrieve web search snippets to ground LLM research in current facts.
+
+    Strategy:
+    1. Try Tavily Search API if TAVILY_API_KEY is set (best quality).
+    2. Fall back to DuckDuckGo Instant Answers API (no key required).
+    3. Return empty list on failure — research proceeds with LLM-only.
+    """
+    snippets = []
+
+    # Try Tavily first (higher quality, structured results)
+    tavily_key = os.getenv("TAVILY_API_KEY")
+    if tavily_key:
+        try:
+            async with httpx.AsyncClient(timeout=8.0) as client:
+                resp = await client.post(
+                    "https://api.tavily.com/search",
+                    json={
+                        "api_key": tavily_key,
+                        "query": query,
+                        "max_results": max_results,
+                        "search_depth": "basic",
+                    },
+                )
+                if resp.status_code == 200:
+                    data = resp.json()
+                    for r in data.get("results", [])[:max_results]:
+                        snippet = r.get("content", "")[:300]
+                        source = r.get("url", "")
+                        if snippet:
+                            snippets.append(f"{snippet} (source: {source})")
+                    if snippets:
+                        logger.info("Tavily grounding: %d snippets for '%s'", len(snippets), query[:50])
+                        return snippets
+        except Exception as e:
+            logger.warning("Tavily search failed, falling back to DuckDuckGo: %s", e)
+
+    # Fallback: DuckDuckGo Instant Answers (no API key needed)
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get(
+                "https://api.duckduckgo.com/",
+                params={"q": query, "format": "json", "no_html": "1", "skip_disambig": "1"},
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                # Abstract text (Wikipedia-sourced summary)
+                if data.get("AbstractText"):
+                    snippets.append(data["AbstractText"][:400])
+                # Related topics
+                for topic in data.get("RelatedTopics", [])[:max_results]:
+                    if isinstance(topic, dict) and topic.get("Text"):
+                        snippets.append(topic["Text"][:200])
+                if snippets:
+                    logger.info("DuckDuckGo grounding: %d snippets for '%s'", len(snippets), query[:50])
+    except Exception as e:
+        logger.warning("DuckDuckGo search failed: %s", e)
+
+    return snippets
 
 RESEARCH_SYSTEM_PROMPT = """You are a neutral research analyst producing anonymous briefing material for an adversarial review process.
 
@@ -98,24 +170,42 @@ class ResearchAgent:
         ]
 
         try:
+            # Phase 1: Web retrieval for factual grounding
+            if stream_callback:
+                await stream_callback(StreamEvent(
+                    event_type="research_start", agent="research",
+                    content="Retrieving current web data for factual grounding...\n",
+                ))
+
+            web_snippets = await _web_search_grounding(decision_question)
+
+            if web_snippets and stream_callback:
+                await stream_callback(StreamEvent(
+                    event_type="research_start", agent="research",
+                    content=f"Found {len(web_snippets)} grounding sources. Analyzing...\n",
+                ))
+
+            # Inject web grounding into the prompt so LLM has current facts
+            if web_snippets:
+                grounding_text = "\n".join(f"- {s}" for s in web_snippets)
+                messages.append(HumanMessage(
+                    content=f"Web-retrieved grounding data (use these current facts to supplement your analysis):\n{grounding_text}"
+                ))
+
+            # Phase 2: LLM analysis with grounding context
             thinking_phases = [
                 "Scanning market landscape and competitive environment...",
-                "Gathering relevant data points and statistics...",
-                "Analyzing historical precedents and case studies...",
-                "Identifying key stakeholders and risk factors...",
-                "Compiling research synthesis...",
+                "Analyzing data points and historical precedents...",
+                "Identifying stakeholders and risk factors...",
+                "Compiling grounded research synthesis...",
             ]
 
             for phase in thinking_phases:
                 if stream_callback:
-                    await stream_callback(
-                        StreamEvent(
-                            event_type="research_start",
-                            agent="research",
-                            content=phase + "\n",
-                        )
-                    )
-                    import asyncio
+                    await stream_callback(StreamEvent(
+                        event_type="research_start", agent="research",
+                        content=phase + "\n",
+                    ))
                     await asyncio.sleep(0.3)
 
             response = await self.llm.ainvoke(messages)
