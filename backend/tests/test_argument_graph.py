@@ -1,7 +1,7 @@
 """Tests for argument dependency graph — DAG construction and graph-theoretic metrics."""
 
 import pytest
-from utils.argument_graph import ArgumentGraph, build_argument_graphs
+from utils.argument_graph import ArgumentGraph, CrossGraphAnalyzer, build_argument_graphs
 
 
 class TestArgumentGraphConstruction:
@@ -297,3 +297,61 @@ class TestTFIDFSimilarity:
         has_edge = (g.out_degree("c1") > 0 or g.out_degree("c2") > 0
                     or g.in_degree("c1") > 0 or g.in_degree("c2") > 0)
         assert has_edge
+
+
+class TestCrossGraphAnalysis:
+    """Test cross-graph dependency analysis between prosecution and defense."""
+
+    def test_no_shared_evidence(self):
+        pro = ArgumentGraph()
+        pro.add_claim("p1", "market growth opportunity", "revenue data", 0.8)
+        defense = ArgumentGraph()
+        defense.add_claim("d1", "legal compliance regulation", "policy framework", 0.7)
+        analyzer = CrossGraphAnalyzer(pro, defense)
+        shared = analyzer.find_shared_evidence()
+        assert len(shared) == 0
+
+    def test_shared_evidence_detected(self):
+        pro = ArgumentGraph()
+        pro.add_claim("p1", "market revenue growth profit expansion", "financial data shows revenue", 0.8)
+        defense = ArgumentGraph()
+        defense.add_claim("d1", "market revenue decline profit shrinking", "financial data shows revenue", 0.7)
+        analyzer = CrossGraphAnalyzer(pro, defense)
+        shared = analyzer.find_shared_evidence(similarity_threshold=0.1)
+        assert len(shared) >= 1
+        assert shared[0]["pro_claim"] == "p1"
+        assert shared[0]["def_claim"] == "d1"
+
+    def test_contradictory_foundations_type(self):
+        pro = ArgumentGraph()
+        pro.add_claim("p1", "market revenue growth profit expansion", "financial data", 0.8)
+        defense = ArgumentGraph()
+        defense.add_claim("d1", "market revenue decline profit contraction", "financial data", 0.7)
+        analyzer = CrossGraphAnalyzer(pro, defense)
+        shared = analyzer.find_shared_evidence(similarity_threshold=0.1)
+        if shared:
+            # Both are foundations (zero in-degree), so type should be contradictory_foundations
+            assert shared[0]["type"] == "contradictory_foundations"
+
+    def test_analyze_returns_full_structure(self):
+        pro = ArgumentGraph()
+        pro.add_claim("p1", "test claim", "evidence", 0.8)
+        defense = ArgumentGraph()
+        defense.add_claim("d1", "test claim", "evidence", 0.7)
+        analyzer = CrossGraphAnalyzer(pro, defense)
+        result = analyzer.analyze()
+        assert "shared_evidence_pairs" in result
+        assert "pair_count" in result
+        assert "types" in result
+        assert "has_contradictory_foundations" in result
+
+    def test_build_argument_graphs_includes_cross_graph(self):
+        pro = [
+            {"id": "p1", "statement": "Market opportunity", "evidence": "data", "confidence": 0.85},
+        ]
+        defense = [
+            {"id": "d1", "statement": "Competition fierce", "evidence": "analysis", "confidence": 0.75},
+        ]
+        result = build_argument_graphs(pro, defense)
+        assert "cross_graph" in result
+        assert "pair_count" in result["cross_graph"]
