@@ -8,6 +8,7 @@ from graph.verdict_graph import (
     _confidence_gate,
     _adaptive_temperature,
     _calibrate_from_witnesses,
+    _validate_constitutional_compliance,
     LOW_CONFIDENCE_THRESHOLD,
     HIGH_CONFIDENCE_OVERRULE_THRESHOLD,
 )
@@ -244,3 +245,68 @@ class TestCalibrateFromWitnesses:
         cal = ct.get_agent_calibration("defense")
         assert cal is not None
         assert cal._total_predictions == 1
+
+
+class TestConstitutionalCompliance:
+    """Verify constitutional directive compliance checking."""
+
+    def test_compliant_prosecutor(self):
+        """Prosecutor with positive opening should pass."""
+        data = {
+            "opening": "This decision should proceed — the opportunity for growth is significant.",
+            "claims": [
+                {"statement": "c1"}, {"statement": "c2"},
+                {"statement": "c3"}, {"statement": "c4"},
+            ],
+            "confidence": 0.8,
+        }
+        result = _validate_constitutional_compliance(data, "prosecutor")
+        assert result["compliant"] is True
+        assert result["violations"] == []
+
+    def test_noncompliant_prosecutor(self):
+        """Prosecutor arguing against should be flagged."""
+        data = {
+            "opening": "This should not proceed. It will fail and is risky and dangerous.",
+            "claims": [{"statement": "c1"}, {"statement": "c2"}, {"statement": "c3"}, {"statement": "c4"}],
+            "confidence": 0.8,
+        }
+        result = _validate_constitutional_compliance(data, "prosecutor")
+        assert result["compliant"] is False
+        assert len(result["violations"]) > 0
+
+    def test_wrong_claim_count(self):
+        """Non-4 claim count should be flagged."""
+        data = {
+            "opening": "We should proceed with this opportunity.",
+            "claims": [{"statement": "c1"}, {"statement": "c2"}],
+            "confidence": 0.7,
+        }
+        result = _validate_constitutional_compliance(data, "prosecutor")
+        assert result["compliant"] is False
+        assert any("Expected 4 claims" in v for v in result["violations"])
+
+    def test_suspicious_confidence(self):
+        """Extreme confidence should be flagged."""
+        data = {
+            "opening": "Good opportunity here.",
+            "claims": [{"statement": f"c{i}"} for i in range(4)],
+            "confidence": 0.01,
+        }
+        result = _validate_constitutional_compliance(data, "prosecutor")
+        assert any("Suspicious confidence" in v for v in result["violations"])
+
+    def test_none_argument(self):
+        """None argument should return non-compliant."""
+        result = _validate_constitutional_compliance(None, "prosecutor")
+        assert result["compliant"] is False
+
+    def test_compliant_defense(self):
+        """Defense with critical language should pass."""
+        data = {
+            "opening": "This proposal carries significant risk and concern — the weakness is clear.",
+            "claims": [{"statement": f"c{i}"} for i in range(4)],
+            "confidence": 0.75,
+        }
+        result = _validate_constitutional_compliance(data, "defense")
+        assert result["compliant"] is True
