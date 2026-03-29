@@ -78,7 +78,7 @@ Build a **multi-agent adversarial AI courtroom** that takes any decision or idea
 | Deep health checks | ✅ | Groq, Redis, session store, uptime |
 | Structured logging | ✅ | contextvars session correlation IDs |
 | Security middleware (XSS, headers) | ✅ | `middleware/security.py` with 7 XSS patterns |
-| Session state machine (FSM) | ✅ | `services/session_manager.py` with 5 states |
+| Session state machine (FSM) | ✅ | `services/session_manager.py` — wired into routes for created→running→complete/error transitions |
 | Pipeline graph visualization | ✅ | `services/graph_visualizer.py` + `PipelineGraph.jsx` |
 | Centralized prompt templates | ✅ | `agents/prompts.py` — format instructions shared, constitutional directives audited |
 | Session analytics aggregation | ✅ | `GET /sessions/analytics` endpoint |
