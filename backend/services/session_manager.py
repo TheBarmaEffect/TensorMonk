@@ -142,6 +142,11 @@ class SessionLifecycle:
         now = datetime.now(timezone.utc)
         return (now - self.created_at).total_seconds()
 
+    @property
+    def elapsed_in_current_state(self) -> float:
+        """Time spent in the current state in seconds."""
+        return (datetime.now(timezone.utc) - self.updated_at).total_seconds()
+
     def to_dict(self) -> dict[str, Any]:
         """Serialize session lifecycle to a dictionary.
 
