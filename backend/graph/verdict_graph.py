@@ -141,6 +141,82 @@ async def research_node(state: VerdictState) -> dict:
             return {"research_package": {}, "errors": [f"Research: {str(e)}"]}
 
 
+def _validate_constitutional_compliance(
+    argument_data: dict,
+    expected_side: str,
+) -> dict:
+    """Validate that an argument complies with its constitutional directive.
+
+    Checks that the prosecution actually argues FOR and defense argues AGAINST.
+    Uses sentiment analysis heuristics on the opening statement to detect
+    directive violations (e.g., a prosecutor that argues against the decision).
+
+    This is a pipeline quality gate — violations are logged as warnings and
+    included in event bus telemetry, but do not block execution (the adversarial
+    process still benefits from the argument content).
+
+    Args:
+        argument_data: The serialized argument dict.
+        expected_side: Either "prosecutor" (must argue FOR) or "defense" (must argue AGAINST).
+
+    Returns:
+        Dict with compliance assessment: compliant (bool), violations (list), confidence.
+    """
+    if not argument_data:
+        return {"compliant": False, "violations": ["No argument data"], "confidence": 0.0}
+
+    opening = (argument_data.get("opening") or "").lower()
+    violations = []
+
+    # Prosecutor must argue FOR — check for hedging/negative language
+    pro_negative_signals = ("should not", "shouldn't", "against", "reject", "fail", "risky", "danger")
+    pro_positive_signals = ("should", "opportunity", "benefit", "advantage", "succeed", "growth", "potential")
+
+    def_negative_signals = ("will work", "great idea", "should proceed", "recommend", "endorse", "support this")
+    def_positive_signals = ("risk", "concern", "weakness", "problem", "challenge", "fail", "danger", "caution")
+
+    if expected_side == "prosecutor":
+        neg_count = sum(1 for s in pro_negative_signals if s in opening)
+        pos_count = sum(1 for s in pro_positive_signals if s in opening)
+        if neg_count > pos_count:
+            violations.append(
+                f"Prosecutor opening contains more negative ({neg_count}) "
+                f"than positive ({pos_count}) signals — possible directive violation"
+            )
+    elif expected_side == "defense":
+        neg_count = sum(1 for s in def_negative_signals if s in opening)
+        pos_count = sum(1 for s in def_positive_signals if s in opening)
+        if neg_count > pos_count:
+            violations.append(
+                f"Defense opening contains more supportive ({neg_count}) "
+                f"than critical ({pos_count}) signals — possible directive violation"
+            )
+
+    # Check claim count (constitutional directive requires exactly 4)
+    claims = argument_data.get("claims", [])
+    if len(claims) != 4:
+        violations.append(f"Expected 4 claims, got {len(claims)}")
+
+    # Check confidence sanity
+    confidence = argument_data.get("confidence", 0)
+    if confidence < 0.1 or confidence > 0.99:
+        violations.append(f"Suspicious confidence value: {confidence}")
+
+    compliant = len(violations) == 0
+    if not compliant:
+        logger.warning(
+            "Constitutional compliance check for %s: %d violations — %s",
+            expected_side, len(violations), "; ".join(violations),
+        )
+
+    return {
+        "compliant": compliant,
+        "violations": violations,
+        "confidence": confidence,
+        "claim_count": len(claims),
+    }
+
+
 def _adaptive_temperature(research_package: dict, base_temp: float = 0.7) -> float:
     """Compute adaptive LLM temperature based on research quality.
 
@@ -283,6 +359,27 @@ async def parallel_arguments_node(state: VerdictState) -> dict:
     merged = {}
     merged["prosecutor_argument"] = pro_result.get("prosecutor_argument")
     merged["defense_argument"] = def_result.get("defense_argument")
+
+    # Constitutional compliance validation — verify both sides argue as directed
+    tid = state.get("thread_id", "")
+    pro_compliance = _validate_constitutional_compliance(
+        merged["prosecutor_argument"], "prosecutor"
+    )
+    def_compliance = _validate_constitutional_compliance(
+        merged["defense_argument"], "defense"
+    )
+
+    if not pro_compliance["compliant"] or not def_compliance["compliant"]:
+        await pipeline_event_bus.publish(PipelineEvent(
+            topic="pipeline.constitutional_violation",
+            session_id=tid,
+            payload={
+                "prosecutor": pro_compliance,
+                "defense": def_compliance,
+            },
+            priority=EventPriority.HIGH,
+        ))
+
     errors = pro_result.get("errors", []) + def_result.get("errors", [])
     if errors:
         merged["errors"] = errors
