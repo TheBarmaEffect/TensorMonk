@@ -11,7 +11,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect, HTTPException
 from fastapi.responses import JSONResponse, PlainTextResponse, Response
 from pydantic import BaseModel
 
-from services.export_service import generate_markdown_report, generate_json_report, generate_pdf_report
+from services.export_service import generate_markdown_report, generate_json_report, generate_pdf_report, generate_docx_report
 
 from config import settings
 from models.schemas import Decision, StreamEvent
@@ -385,6 +385,23 @@ async def export_pdf(session_id: str):
         content=pdf_bytes,
         media_type="application/pdf",
         headers={"Content-Disposition": f"attachment; filename=verdict-{session_id[:8]}.pdf"},
+    )
+
+
+@router.get("/{session_id}/export/docx")
+async def export_docx(session_id: str):
+    """Export the verdict session as a formatted DOCX report."""
+    session = sessions.get(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if not session.get("result"):
+        raise HTTPException(status_code=202, detail="Session not complete")
+
+    docx_bytes = generate_docx_report(session["result"])
+    return Response(
+        content=docx_bytes,
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers={"Content-Disposition": f"attachment; filename=verdict-{session_id[:8]}.docx"},
     )
 
 
