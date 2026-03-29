@@ -20,6 +20,7 @@ from utils.cache import TTLCache
 
 from config import settings
 from models.schemas import Decision, StreamEvent
+from utils.llm_helpers import create_llm, parse_llm_json
 
 logger = logging.getLogger(__name__)
 
@@ -165,15 +166,9 @@ async def detect_domain(request: DetectDomainRequest):
     Uses the LLM to classify the decision into a domain category and
     recommends the most appropriate output format for that domain.
     """
-    from langchain_groq import ChatGroq
     from langchain_core.messages import SystemMessage, HumanMessage
 
-    llm = ChatGroq(
-        model="llama-3.3-70b-versatile",
-        temperature=0.1,
-        max_tokens=512,
-        api_key=settings.groq_api_key,
-    )
+    llm = create_llm(temperature=0.1, max_tokens=512)
 
     system_prompt = """You are a domain classifier for business decisions.
 Classify the given decision question into one of these domains:
@@ -201,20 +196,24 @@ Respond with ONLY valid JSON:
     if request.context:
         prompt += f"\nContext: {request.context}"
 
+    fallback_result = {
+        "domain": "business",
+        "confidence": 0.5,
+        "suggested_format": "executive",
+        "reasoning": "Could not classify — defaulting to business/executive",
+    }
+
     try:
         response = await llm.ainvoke([
             SystemMessage(content=system_prompt),
             HumanMessage(content=prompt),
         ])
 
-        cleaned = response.content.strip()
-        if cleaned.startswith("```"):
-            cleaned = cleaned.split("\n", 1)[1] if "\n" in cleaned else cleaned[3:]
-            if cleaned.endswith("```"):
-                cleaned = cleaned[:-3]
-            cleaned = cleaned.strip()
-
-        data = json.loads(cleaned)
+        data = parse_llm_json(
+            response.content,
+            fallback=fallback_result,
+            operation_name="domain_detection",
+        )
         result = {
             "domain": data.get("domain", "business"),
             "confidence": data.get("confidence", 0.8),
@@ -229,12 +228,7 @@ Respond with ONLY valid JSON:
         return DetectDomainResponse(**result)
     except Exception as e:
         logger.error("Domain detection failed: %s", e)
-        return DetectDomainResponse(
-            domain="business",
-            confidence=0.5,
-            suggested_format="executive",
-            reasoning="Could not classify — defaulting to business/executive",
-        )
+        return DetectDomainResponse(**fallback_result)
 
 
 @router.get("/formats")
@@ -457,6 +451,45 @@ async def stream_verdict(websocket: WebSocket, session_id: str):
                 "errors": result.get("errors", []),
             }
 
+            # Compute analysis data and embed it in the result
+            try:
+                from utils.argument_quality import score_argument_quality
+                from utils.verdict_stability import full_stability_analysis
+                from utils.argument_graph import build_argument_graphs
+
+                pro_data = result.get("prosecutor_argument", {})
+                def_data = result.get("defense_argument", {})
+                verdict_data = result.get("verdict", {})
+                witnesses = result.get("witness_reports", [])
+
+                pro_quality = score_argument_quality(pro_data)
+                def_quality = score_argument_quality(def_data)
+
+                pro_claims = pro_data.get("claims", []) if pro_data else []
+                def_claims = def_data.get("claims", []) if def_data else []
+                graph_analysis = build_argument_graphs(pro_claims, def_claims)
+
+                stability = full_stability_analysis(
+                    prosecution_score=pro_data.get("confidence", 0.5) if pro_data else 0.5,
+                    defense_score=def_data.get("confidence", 0.5) if def_data else 0.5,
+                    ruling=verdict_data.get("ruling", "conditional") if verdict_data else "conditional",
+                    witness_reports=witnesses,
+                    prosecution_base_confidence=pro_data.get("confidence", 0.5) if pro_data else 0.5,
+                    defense_base_confidence=def_data.get("confidence", 0.5) if def_data else 0.5,
+                )
+
+                session["result"]["analysis"] = {
+                    "argument_quality": {
+                        "prosecution": pro_quality,
+                        "defense": def_quality,
+                    },
+                    "argument_graphs": graph_analysis,
+                    "verdict_stability": stability,
+                }
+            except Exception as analysis_err:
+                logger.warning("Analysis computation failed (non-fatal): %s", analysis_err)
+                session["result"]["analysis"] = None
+
             session["status"] = "complete"
             _persist_session(session_id, session)
         except Exception as e:
@@ -596,7 +629,6 @@ async def followup_question(session_id: str, request: FollowUpRequest):
     if not session.get("result"):
         raise HTTPException(status_code=202, detail="Session not complete")
 
-    from langchain_groq import ChatGroq
     from langchain_core.messages import SystemMessage, HumanMessage
 
     result = session["result"]
@@ -616,12 +648,7 @@ async def followup_question(session_id: str, request: FollowUpRequest):
 
     context = "\n".join(context_parts)
 
-    llm = ChatGroq(
-        model="llama-3.3-70b-versatile",
-        temperature=0.6,
-        max_tokens=1024,
-        api_key=settings.groq_api_key,
-    )
+    llm = create_llm(temperature=0.6, max_tokens=1024)
 
     messages = [
         SystemMessage(content=f"""You are a legal analyst following up on a courtroom AI analysis.

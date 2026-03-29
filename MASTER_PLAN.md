@@ -99,7 +99,8 @@ Build a **multi-agent adversarial AI courtroom** that takes any decision or idea
 | Argument dependency graph (DAG) | ✅ | `utils/argument_graph.py` — BFS cascading impact, coherence scoring |
 | Verdict stability perturbation analysis | ✅ | `utils/verdict_stability.py` — 50-run Monte Carlo, evidence margin |
 | Argument quality scoring (A-D grades) | ✅ | `utils/argument_quality.py` — 5-dimension heuristic assessment |
-| 362 tests (unit + integration) | ✅ | 21 test files (pytest) |
+| Inline analysis in session results | ✅ | `run_pipeline()` computes quality/stability/graph and embeds in result |
+| 385 tests (unit + integration) | ✅ | 22 test files (pytest) |
 
 ### Pre-Committed Cut Rule
 > "Analytics charts are cut before the courtroom UI is degraded."
@@ -150,7 +151,8 @@ All Tier 2 features were moved to functional status. The courtroom UI was never 
 | test_argument_graph.py | 23 | DAG construction, degree metrics, coherence, cascading impact |
 | test_verdict_stability.py | 17 | Evidence margin, perturbation Monte Carlo, flip rate bounds |
 | test_argument_quality.py | 24 | Specificity, diversity, calibration, coherence, grading |
-| **Total** | **362** | |
+| test_llm_helpers.py | 23 | JSON parsing, code fence stripping, thinking phases, LLM factory, low-temp retry |
+| **Total** | **385** | |
 
 ## Technical Decisions
 
