@@ -16,8 +16,22 @@ All notable changes to the Verdict project.
 - **Structural Entropy**: Shannon entropy over normalized degree distribution measures dependency evenness. Low entropy (star topology) = fragile central claims; high entropy (mesh topology) = robust distributed dependencies.
 - **Pivotal Witness Synthesis Wiring**: Sensitivity analysis results (pivotal witnesses, fragility score) propagated through VerdictState to synthesis agent for targeted recommendations.
 
+### Added — Calibration Feedback Loop
+- **Auto-Fit Calibration**: `CalibrationTracker.auto_fit_all()` fits Platt scaling for all agents with 10+ samples. Recalibration detection via `needs_recalibration()` with configurable ECE threshold.
+- **Pipeline Calibration Wiring**: Witness outcomes (sustained/overruled) recorded into CalibrationTracker after pipeline completion. Auto-fits Platt scaling as data accumulates — confidence gate applies learned corrections to raw witness scores.
+- **Export Stability Metrics**: Markdown reports now include Section 7 (Analysis & Quality Metrics) with robustness score, flip rate, evidence margin, argument grades, and quality gap.
+
+### Added — Argument Quality
+- **Logical Structure Dimension**: `score_logical_structure()` — detects forward references between claims and causal connectors (therefore, because, building on). Completes the documented 6-dimension quality assessment. Weights rebalanced across all 6 dimensions.
+
+### Fixed
+- **Cormorant Garamond font**: Added Google Fonts import and --font-heading CSS variable; applied to Verdict title, ruling label, and synthesis header. Resolves claim/code mismatch.
+- **Liquid glass cards**: Added .glass-card and .glass-card-elevated CSS with backdrop-filter: blur. Applied to verdict and synthesis cards.
+- **Domain count**: Fixed README listing 6 domains when domains.yaml defines 9 (business, financial, legal, medical, hiring, technology, strategic, product, marketing).
+- **Session data cleanup**: Removed 1362 session JSON files from git tracking; added .gitignore rules to prevent future bulk commits.
+
 ### Testing
-- 458 total tests across 22 test files (up from 426)
+- 472 total tests across 22 test files (up from 426)
 - Added 7 sensitivity analysis tests (pivotal detection, fragility scoring, leave-one-out)
 - Added 11 TF-IDF and topological sort tests
 - Added 5 cross-graph analysis tests (shared evidence, contradictory foundations)
