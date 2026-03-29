@@ -69,7 +69,7 @@ User Input (question + context + output_format)
 - **Adversarial Isolation**: Prosecutor and defense run in parallel and never see each other's output. The judge is the first node to receive both.
 - **Hallucination Guard**: Agent outputs are validated against Pydantic schemas. Malformed JSON triggers a retry with `temperature=0.3` for deterministic recovery.
 - **Checkpointing**: LangGraph `AsyncRedisSaver` for production fault tolerance (falls back to `MemorySaver` when `REDIS_URL` is unset). State persisted at every node for resume/replay.
-- **Human-in-the-Loop**: `interrupt_before=['verdict']` pauses the graph when average witness confidence < 0.6, allowing human review before the final ruling.
+- **Human-in-the-Loop (Architecture Ready)**: `interrupt_before=['verdict_with_review']` infrastructure is built — the confidence gate routes low-confidence verdicts to a review node. Enable via `build_verdict_graph(interrupt_before_verdict=True)` when deploying with human reviewers.
 - **Dynamic Witness Spawning**: Conditional edges route through `_should_spawn_witnesses` — the Judge's cross-examination determines which claims are contested and what witness type to spawn for each. If no claims are contested, witnesses are skipped entirely.
 - **Domain-Aware Constitutional Overlays**: Loaded from `backend/config/domains.yaml` at runtime — each domain defines argumentation constraints, evidence hierarchy, and few-shot synthesis anchors.
 
