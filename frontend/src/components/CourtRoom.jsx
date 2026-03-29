@@ -445,6 +445,13 @@ export default function CourtRoom() {
                   }} className="flex items-center gap-2 px-4 py-2 rounded-lg text-[12px] font-medium bg-[var(--bg-surface)] text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)] border border-[var(--border)] transition">
                     📋 JSON
                   </button>
+                  <button onClick={() => {
+                    fetch(`/api/verdict/${sessionId}/export/docx`).then(r => r.blob()).then(b => {
+                      const u = URL.createObjectURL(b), a = document.createElement('a'); a.href = u; a.download = 'verdict-report.docx'; a.click(); URL.revokeObjectURL(u)
+                    })
+                  }} className="flex items-center gap-2 px-4 py-2 rounded-lg text-[12px] font-medium bg-[var(--bg-surface)] text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)] border border-[var(--border)] transition">
+                    📝 DOCX
+                  </button>
                 </motion.div>
 
                 <div className="max-w-2xl mx-auto">
