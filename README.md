@@ -120,6 +120,7 @@ User Input (question + context + output_format)
 - Framer Motion ACT transitions and staggered reveal animations
 - Output format selector (Executive, Technical, Legal, Investor)
 - Domain badge auto-detected as user types
+- Voice input via Web Speech API — mic button with animated waveform indicator, transcript streams into text input
 
 **Deployment**
 - Frontend live on Vercel: [https://frontend-phi-ten-83.vercel.app](https://frontend-phi-ten-83.vercel.app)
@@ -136,7 +137,7 @@ Tier 2 cut rule: *"analytics charts are cut before the courtroom UI is degraded.
 |---------|--------|----------------|
 | Recharts analytics panel | Component scaffolded, not wired to live data | Courtroom UI polish prioritized over charts |
 | Verdict history persistence | In-memory only, resets on restart | Redis persistence deferred to post-hackathon |
-| Voice input | Mic button in UI, Web Speech API varies by browser | Cross-browser reliability not demo-safe |
+| Voice input | ✅ Functional — `MicButton.jsx` + `useVoiceInput.js` | Moved to Tier 1; works in Chrome/Edge |
 | Verdict sharing URL | Not implemented | Time constraint |
 | DOCX export | Not implemented | PDF + Markdown + JSON sufficient for demo |
 
