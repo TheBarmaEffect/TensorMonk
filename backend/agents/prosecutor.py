@@ -15,6 +15,7 @@ from langchain_core.messages import SystemMessage, HumanMessage
 from config import settings
 from config.domain_config import get_constitutional_overlay, get_evidence_hierarchy
 from models.schemas import Argument, Claim, StreamEvent
+from utils.resilience import retry_with_backoff
 
 logger = logging.getLogger(__name__)
 
@@ -134,7 +135,10 @@ class ProsecutorAgent:
                     )
                     await asyncio.sleep(0.4)
 
-            response = await self.llm.ainvoke(messages)
+            response = await retry_with_backoff(
+                self.llm.ainvoke, messages,
+                max_retries=2, base_delay=1.0, operation_name="Prosecutor LLM",
+            )
             argument = self._parse_response(response.content)
 
             # Hallucination guard: if parse produced fallback, retry with low temperature
@@ -146,7 +150,10 @@ class ProsecutorAgent:
                     max_tokens=2048,
                     api_key=settings.groq_api_key,
                 )
-                retry_response = await retry_llm.ainvoke(messages)
+                retry_response = await retry_with_backoff(
+                    retry_llm.ainvoke, messages,
+                    max_retries=1, base_delay=0.5, operation_name="Prosecutor LLM (low-temp retry)",
+                )
                 argument = self._parse_response(retry_response.content)
 
             if stream_callback:

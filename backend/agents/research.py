@@ -20,6 +20,7 @@ from langchain_core.messages import SystemMessage, HumanMessage
 
 from config import settings
 from models.schemas import StreamEvent
+from utils.resilience import retry_with_backoff
 
 logger = logging.getLogger(__name__)
 
@@ -208,7 +209,10 @@ class ResearchAgent:
                     ))
                     await asyncio.sleep(0.3)
 
-            response = await self.llm.ainvoke(messages)
+            response = await retry_with_backoff(
+                self.llm.ainvoke, messages,
+                max_retries=2, base_delay=1.0, operation_name="Research LLM",
+            )
             research_package = self._parse_response(response.content)
 
             if stream_callback:
