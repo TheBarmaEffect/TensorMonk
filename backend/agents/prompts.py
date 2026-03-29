@@ -15,6 +15,9 @@ Design principles:
 
 from typing import Final
 
+# Prompt version — bump when any prompt text changes for audit trail
+PROMPT_VERSION: Final[str] = "1.4.0"
+
 
 # ─── Research Agent ──────────────────────────────────────────────────────────
 
