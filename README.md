@@ -107,7 +107,7 @@ User Input (question + context + output_format)
 - Few-shot synthesis anchors per domain (e.g., "Week 1-2: Implement WorkOS for enterprise SSO")
 - Parallel Prosecutor + Defense execution via `asyncio.gather`
 - LangGraph StateGraph with `MemorySaver` checkpointing (`AsyncRedisSaver` when `REDIS_URL` set)
-- Confidence-based routing: 3 verdict paths (normal, low-confidence review, hallucination guard at `temperature=0.3`)
+- Multi-factor confidence gate: 4-factor routing (domain-adjusted threshold, witness agreement ratio, confidence variance, overrule detection) with 3 verdict paths (normal, low-confidence review, hallucination guard at `temperature=0.3`)
 - Hallucination guard — agent outputs validated against Pydantic v2 schemas, malformed JSON triggers `temperature=0.3` retry
 - Real-time WebSocket streaming with typed `StreamEvent` objects
 - Export: Markdown, PDF (via fpdf2), DOCX (via python-docx), and structured JSON — all endpoints functional
@@ -116,7 +116,7 @@ User Input (question + context + output_format)
 - Verdict sharing: `GET /api/verdict/{id}/share` generates short URL token, `GET /shared/{token}` retrieves results
 - Web search grounding: Research Agent queries Tavily (or DuckDuckGo fallback) for current facts before LLM analysis
 - Inline analysis in session results: argument quality, stability, and dependency graph computed and embedded in every completed session result — no separate endpoint required
-- 395 tests across 22 test files: schemas, graph, API, exports, resilience, cache, middleware, domain config, errors, metrics, security, prompts, integration, graph viz, session FSM, validators, event bus, calibration, LLM helpers (pytest)
+- 409 tests across 22 test files: schemas, graph, API, exports, resilience, cache, middleware, domain config, errors, metrics, security, prompts, integration, graph viz, session FSM, validators, event bus, calibration, LLM helpers (pytest)
 - Input validation on all API request models (question length, context length, format enum)
 - Rate limiting middleware: token bucket per IP with configurable RPM/burst
 - Request timing middleware: X-Request-ID + X-Response-Time headers on all responses
@@ -127,7 +127,8 @@ User Input (question + context + output_format)
 - Graceful startup/shutdown lifecycle handlers with structured logging
 - Session-aware structured logging via contextvars for async correlation IDs
 - Structured error hierarchy: VerdictError → AgentError/SessionError/ExportError with JSON serialization
-- Pipeline performance metrics: per-agent durations, success/failure counts, exposed via `/metrics` endpoint
+- Pipeline performance metrics: per-agent durations with p50/p95/p99 percentiles, error rates, and pipeline-wide aggregates exposed via `/metrics` endpoint
+- Pipeline progress tracking: `/status` endpoint returns completion percentage, current stage, stages remaining, and estimated time to completion
 - Security middleware: XSS pattern detection, HTML entity sanitization, body size limits, security headers
 - Shared LLM utilities: `utils/llm_helpers.py` — all 6 agents use `parse_llm_json()`, `create_llm()`, `emit_thinking_phases()`, and `retry_with_low_temperature()` (eliminated ~160 lines of duplicated boilerplate)
 - Centralized prompt templates: ALL 6 agent system prompts defined in `agents/prompts.py` — zero inline prompt definitions, single source of truth for constitutional directives

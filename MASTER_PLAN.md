@@ -13,7 +13,8 @@ Build a **multi-agent adversarial AI courtroom** that takes any decision or idea
 
 ### 2. Confidence-Based Routing (ADR-002)
 - Three verdict paths: normal, low-confidence review, hallucination guard (temperature=0.3)
-- Witness confidence < 0.6 routes to `verdict_with_review` node; `interrupt_before` activated via `INTERRUPT_BEFORE_VERDICT` env var
+- Multi-factor confidence gate: domain-adjusted thresholds, witness agreement ratio, confidence variance, overrule detection
+- `interrupt_before` activated via `INTERRUPT_BEFORE_VERDICT` env var
 - Confidence > 0.9 with majority overruled triggers low-temperature retry
 
 ### 3. Domain-Aware Overlays (ADR-003)
@@ -72,7 +73,7 @@ Build a **multi-agent adversarial AI courtroom** that takes any decision or idea
 | Retry with exponential backoff | ✅ | Wired into all 6 agent LLM calls |
 | Circuit breaker | ✅ | 3-state (CLOSED/OPEN/HALF_OPEN) — wired into LLM calls via `call_llm_with_resilience()` |
 | TTL cache for domain detection | ✅ | Wired into detect-domain endpoint |
-| Pipeline performance metrics | ✅ | `/metrics` endpoint with per-agent stats |
+| Pipeline performance metrics | ✅ | `/metrics` endpoint with per-agent stats, p50/p95/p99 percentiles, error rates |
 | Structured error hierarchy | ✅ | VerdictError → AgentError/SessionError/ExportError |
 | Input validation | ✅ | Pydantic field_validator on all API models |
 | Deep health checks | ✅ | Groq, Redis, session store, uptime |
@@ -100,7 +101,7 @@ Build a **multi-agent adversarial AI courtroom** that takes any decision or idea
 | Verdict stability perturbation analysis | ✅ | `utils/verdict_stability.py` — 50-run Monte Carlo, evidence margin |
 | Argument quality scoring (A-D grades) | ✅ | `utils/argument_quality.py` — 5-dimension heuristic assessment |
 | Inline analysis in session results | ✅ | `run_pipeline()` computes quality/stability/graph and embeds in result |
-| 395 tests (unit + integration) | ✅ | 22 test files (pytest) |
+| 409 tests (unit + integration) | ✅ | 22 test files (pytest) |
 
 ### Pre-Committed Cut Rule
 > "Analytics charts are cut before the courtroom UI is degraded."
@@ -131,15 +132,15 @@ All Tier 2 features were moved to functional status. The courtroom UI was never 
 | Test File | Count | Scope |
 |-----------|-------|-------|
 | test_schemas.py | 13 | Pydantic model validation, confidence bounds |
-| test_graph.py | 31 | Graph topology, strip_authorship, conditional edges, adaptive temp, calibration, constitutional compliance |
-| test_api.py | 23 | API contracts, input validation, domain detection, quality gate |
+| test_graph.py | 35 | Graph topology, strip_authorship, conditional edges, multi-factor confidence gate, domain thresholds, adaptive temp, calibration, constitutional compliance |
+| test_api.py | 24 | API contracts, input validation, domain detection, quality gate, progress tracking |
 | test_exports.py | 11 | PDF/DOCX/MD/JSON generation, domain themes |
 | test_resilience.py | 10 | Retry backoff, circuit breaker states |
 | test_cache.py | 9 | TTL expiration, key normalization, eviction |
 | test_middleware.py | 7 | Token bucket algorithm, exempt paths |
 | test_domain_config.py | 5 | YAML loading, constitutional overlays |
 | test_errors.py | 10 | Error hierarchy, JSON serialization |
-| test_metrics.py | 7 | Agent tracking, pipeline metrics |
+| test_metrics.py | 17 | Agent tracking, pipeline metrics, percentile computation, error rates |
 | test_security.py | 22 | XSS detection, input sanitization, security headers |
 | test_prompts.py | 22 | Constitutional directive auditing, prompt structure |
 | test_integration.py | 37 | Session lifecycle, domain detection, analytics, claim overlap, research quality, synthesis coverage, analysis pipeline |
@@ -152,7 +153,7 @@ All Tier 2 features were moved to functional status. The courtroom UI was never 
 | test_verdict_stability.py | 17 | Evidence margin, perturbation Monte Carlo, flip rate bounds |
 | test_argument_quality.py | 24 | Specificity, diversity, calibration, coherence, grading |
 | test_llm_helpers.py | 23 | JSON parsing, code fence stripping, thinking phases, LLM factory, low-temp retry |
-| **Total** | **395** | |
+| **Total** | **409** | |
 
 ## Technical Decisions
 
