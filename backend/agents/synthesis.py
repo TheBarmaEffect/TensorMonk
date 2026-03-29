@@ -27,6 +27,7 @@ from langchain_core.messages import SystemMessage, HumanMessage
 from config import settings
 from config.domain_config import get_synthesis_anchors, get_suggested_format
 from utils.resilience import retry_with_backoff
+from utils.llm_helpers import parse_llm_json, emit_thinking_phases, create_llm, retry_with_low_temperature
 from models.schemas import (
     Argument,
     WitnessReport,
@@ -56,12 +57,7 @@ class SynthesisAgent:
     """Reads the entire proceeding and produces an evolved version of the idea."""
 
     def __init__(self) -> None:
-        self.llm = ChatGroq(
-            model="llama-3.3-70b-versatile",
-            temperature=0.7,
-            max_tokens=3000,
-            api_key=settings.groq_api_key,
-        )
+        self.llm = create_llm(temperature=0.7, max_tokens=3000)
 
     async def run(
         self,
@@ -156,16 +152,12 @@ class SynthesisAgent:
                 "Identifying concrete next steps and actions...",
             ]
 
-            for phase in thinking_phases:
-                if stream_callback:
-                    await stream_callback(
-                        StreamEvent(
-                            event_type="synthesis_start",
-                            agent="synthesis",
-                            content=phase + "\n",
-                        )
-                    )
-                    await asyncio.sleep(0.3)
+            await emit_thinking_phases(
+                phases=thinking_phases,
+                agent_name="synthesis",
+                event_type="synthesis_start",
+                stream_callback=stream_callback,
+            )
 
             response = await retry_with_backoff(
                 self.llm.ainvoke, messages,
@@ -177,18 +169,13 @@ class SynthesisAgent:
 
             # Hallucination guard: if parse failed, retry with low temperature
             if not data.get("improved_idea") or len(data.get("improved_idea", "")) < 50:
-                logger.warning("Synthesis output malformed, retrying with temperature=0.3")
-                retry_llm = ChatGroq(
-                    model="llama-3.3-70b-versatile",
-                    temperature=0.3,
+                data = await retry_with_low_temperature(
+                    messages=messages,
+                    parse_fn=self._parse_json,
+                    quality_check_fn=lambda d: bool(d.get("improved_idea")) and len(d.get("improved_idea", "")) >= 50,
                     max_tokens=3000,
-                    api_key=settings.groq_api_key,
+                    operation_name="Synthesis",
                 )
-                retry_response = await retry_with_backoff(
-                    retry_llm.ainvoke, messages,
-                    max_retries=1, base_delay=0.5, operation_name="Synthesis LLM (low-temp retry)",
-                )
-                data = self._parse_json(retry_response.content)
 
             synthesis = Synthesis(
                 decision_id=verdict.decision_id,
@@ -293,21 +280,14 @@ class SynthesisAgent:
         return metrics
 
     def _parse_json(self, response: str) -> dict:
-        """Parse JSON from LLM response."""
-        cleaned = response.strip()
-        if cleaned.startswith("```"):
-            cleaned = cleaned.split("\n", 1)[1] if "\n" in cleaned else cleaned[3:]
-            if cleaned.endswith("```"):
-                cleaned = cleaned[:-3]
-            cleaned = cleaned.strip()
-
-        try:
-            return json.loads(cleaned)
-        except json.JSONDecodeError:
-            logger.warning("Failed to parse synthesis JSON")
-            return {
-                "improved_idea": cleaned[:1000],
+        """Parse JSON from LLM response — delegates to shared utility."""
+        return parse_llm_json(
+            response,
+            fallback={
+                "improved_idea": response.strip()[:1000],
                 "addressed_objections": [],
                 "recommended_actions": [],
                 "strength_score": 0.6,
-            }
+            },
+            operation_name="Synthesis",
+        )

@@ -21,6 +21,7 @@ from langchain_core.messages import SystemMessage, HumanMessage
 from config import settings
 from models.schemas import StreamEvent
 from utils.resilience import retry_with_backoff
+from utils.llm_helpers import parse_llm_json, emit_thinking_phases, create_llm
 
 logger = logging.getLogger(__name__)
 
@@ -115,12 +116,7 @@ class ResearchAgent:
     """Produces a neutral, anonymous research package shared by both Prosecutor and Defense."""
 
     def __init__(self) -> None:
-        self.llm = ChatGroq(
-            model="llama-3.3-70b-versatile",
-            temperature=0.5,
-            max_tokens=2048,
-            api_key=settings.groq_api_key,
-        )
+        self.llm = create_llm(temperature=0.5, max_tokens=2048)
 
     async def run(
         self,
@@ -194,20 +190,17 @@ class ResearchAgent:
                 ))
 
             # Phase 2: LLM analysis with grounding context
-            thinking_phases = [
-                "Scanning market landscape and competitive environment...",
-                "Analyzing data points and historical precedents...",
-                "Identifying stakeholders and risk factors...",
-                "Compiling grounded research synthesis...",
-            ]
-
-            for phase in thinking_phases:
-                if stream_callback:
-                    await stream_callback(StreamEvent(
-                        event_type="research_start", agent="research",
-                        content=phase + "\n",
-                    ))
-                    await asyncio.sleep(0.3)
+            await emit_thinking_phases(
+                phases=[
+                    "Scanning market landscape and competitive environment...",
+                    "Analyzing data points and historical precedents...",
+                    "Identifying stakeholders and risk factors...",
+                    "Compiling grounded research synthesis...",
+                ],
+                agent_name="research",
+                event_type="research_start",
+                stream_callback=stream_callback,
+            )
 
             response = await retry_with_backoff(
                 self.llm.ainvoke, messages,
@@ -301,23 +294,16 @@ class ResearchAgent:
         return scores
 
     def _parse_response(self, response: str) -> dict:
-        """Parse the LLM JSON response into a research package dict."""
-        cleaned = response.strip()
-        if cleaned.startswith("```"):
-            cleaned = cleaned.split("\n", 1)[1] if "\n" in cleaned else cleaned[3:]
-            if cleaned.endswith("```"):
-                cleaned = cleaned[:-3]
-            cleaned = cleaned.strip()
-
-        try:
-            return json.loads(cleaned)
-        except json.JSONDecodeError:
-            logger.warning("Failed to parse research JSON, wrapping raw text")
-            return {
-                "market_context": cleaned,
+        """Parse the LLM JSON response — delegates to shared utility."""
+        return parse_llm_json(
+            response,
+            fallback={
+                "market_context": response.strip()[:500],
                 "key_data_points": [],
                 "precedents": [],
                 "stakeholders": [],
                 "risk_landscape": [],
-                "summary": cleaned[:500],
-            }
+                "summary": response.strip()[:500],
+            },
+            operation_name="Research",
+        )
