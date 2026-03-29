@@ -610,3 +610,10 @@ class TestEndToEndGraphTopology:
             # Either has explicit threshold or falls to default 0.6
             threshold = DOMAIN_CONFIDENCE_THRESHOLDS.get(domain_name, 0.6)
             assert 0.0 < threshold <= 1.0
+
+def test_sample_claims_fixture(sample_claims):
+    """Verify shared fixture provides valid test claims."""
+    assert len(sample_claims) == 2
+    assert all("id" in c for c in sample_claims)
+    assert all("confidence" in c for c in sample_claims)
+
