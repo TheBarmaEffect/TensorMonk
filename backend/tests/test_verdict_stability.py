@@ -224,3 +224,31 @@ class TestSensitivityAnalysis:
         impacts = result["per_witness_impact"]
         if len(impacts) >= 2:
             assert impacts[0]["margin_shift"] >= impacts[1]["margin_shift"]
+
+
+class TestVerdictSummary:
+    def test_robust_decisive(self):
+        from utils.verdict_stability import verdict_summary
+        result = {"combined_robustness": 0.92, "verdict_is_robust": True,
+                  "evidence_margin": {"classification": "decisive"},
+                  "sensitivity": {"pivotal_witnesses": []}}
+        s = verdict_summary(result)
+        assert "robust" in s.lower()
+        assert "decisive" in s
+
+    def test_fragile_with_pivotal(self):
+        from utils.verdict_stability import verdict_summary
+        result = {"combined_robustness": 0.45, "verdict_is_robust": False,
+                  "evidence_margin": {"classification": "razor_thin"},
+                  "sensitivity": {"pivotal_witnesses": ["w1", "w2"]}}
+        s = verdict_summary(result)
+        assert "FRAGILE" in s
+        assert "2 pivotal" in s
+
+    def test_stable_but_narrow(self):
+        from utils.verdict_stability import verdict_summary
+        result = {"combined_robustness": 0.75, "verdict_is_robust": True,
+                  "evidence_margin": {"classification": "narrow"},
+                  "sensitivity": {"pivotal_witnesses": []}}
+        s = verdict_summary(result)
+        assert "narrow" in s
