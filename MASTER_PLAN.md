@@ -20,7 +20,7 @@ Build a **multi-agent adversarial AI courtroom** that takes any decision or idea
 ### 3. Domain-Aware Overlays (ADR-003)
 - Domain classification via LLM with TTL caching
 - Per-domain constitutional overlays, evidence hierarchies, synthesis anchors
-- 6+ domains: business, financial, legal, medical, technology, hiring
+- 9 domains: business, financial, legal, medical, hiring, technology, strategic, product, marketing
 
 ### 4. Event-Driven Observability (ADR-004)
 - Async event bus with topic-based pub/sub and priority ordering
