@@ -185,6 +185,106 @@ def perturbation_stability(
     return result
 
 
+def sensitivity_analysis(
+    witness_reports: list[dict],
+    prosecution_base_confidence: float,
+    defense_base_confidence: float,
+) -> dict[str, Any]:
+    """Identify which specific witness would flip the verdict if removed.
+
+    Leave-one-out analysis: for each witness, compute the verdict direction
+    WITHOUT that witness and check if it differs from the full-evidence verdict.
+    This reveals which witnesses are "pivotal" — their testimony alone tips
+    the ruling.
+
+    This is a decision-theoretic sensitivity test: a robust verdict should not
+    depend on any single witness. If removing one witness flips the outcome,
+    the verdict is fragile and the synthesis should flag this dependency.
+
+    Args:
+        witness_reports: List of witness report dicts.
+        prosecution_base_confidence: Base prosecution confidence.
+        defense_base_confidence: Base defense confidence.
+
+    Returns:
+        Dict with pivotal witnesses, fragility score, and per-witness impact.
+    """
+    if not witness_reports:
+        return {
+            "pivotal_witnesses": [],
+            "fragility_score": 0.0,
+            "per_witness_impact": [],
+        }
+
+    def _compute_scores(reports: list[dict]) -> tuple[float, float]:
+        """Compute pro/def scores from a subset of witness reports."""
+        pro = prosecution_base_confidence
+        def_s = defense_base_confidence
+        for w in reports:
+            conf = w.get("confidence", 0.5)
+            verdict = w.get("verdict_on_claim", "inconclusive")
+            from_agent = w.get("from_agent", "")
+            is_pro = from_agent == "prosecutor" or w.get("claim_id", "").startswith("pro")
+
+            if verdict == "sustained":
+                if is_pro:
+                    pro = min(1.0, pro + 0.1 * conf)
+                else:
+                    def_s = min(1.0, def_s + 0.1 * conf)
+            elif verdict == "overruled":
+                if is_pro:
+                    pro = max(0.0, pro - 0.15 * conf)
+                else:
+                    def_s = max(0.0, def_s - 0.15 * conf)
+        return pro, def_s
+
+    # Full verdict direction
+    full_pro, full_def = _compute_scores(witness_reports)
+    full_winner = "prosecution" if full_pro >= full_def else "defense"
+    full_margin = abs(full_pro - full_def)
+
+    pivotal_witnesses: list[str] = []
+    per_witness_impact: list[dict[str, Any]] = []
+
+    for i, w in enumerate(witness_reports):
+        # Leave-one-out: compute verdict without this witness
+        subset = witness_reports[:i] + witness_reports[i + 1:]
+        loo_pro, loo_def = _compute_scores(subset)
+        loo_winner = "prosecution" if loo_pro >= loo_def else "defense"
+        loo_margin = abs(loo_pro - loo_def)
+
+        claim_id = w.get("claim_id", f"witness_{i}")
+        flips_verdict = loo_winner != full_winner
+        margin_shift = round(abs(full_margin - loo_margin), 4)
+
+        if flips_verdict:
+            pivotal_witnesses.append(claim_id)
+
+        per_witness_impact.append({
+            "claim_id": claim_id,
+            "witness_type": w.get("witness_type", "unknown"),
+            "verdict_on_claim": w.get("verdict_on_claim", "inconclusive"),
+            "flips_verdict": flips_verdict,
+            "margin_shift": margin_shift,
+        })
+
+    # Fragility: fraction of witnesses whose removal flips the verdict
+    fragility = len(pivotal_witnesses) / len(witness_reports) if witness_reports else 0.0
+
+    logger.info(
+        "Sensitivity analysis: %d/%d witnesses are pivotal (fragility=%.2f)",
+        len(pivotal_witnesses), len(witness_reports), fragility,
+    )
+
+    return {
+        "pivotal_witnesses": pivotal_witnesses,
+        "fragility_score": round(fragility, 4),
+        "per_witness_impact": per_witness_impact,
+        "full_verdict_direction": full_winner,
+        "full_margin": round(full_margin, 4),
+    }
+
+
 def full_stability_analysis(
     prosecution_score: float,
     defense_score: float,
@@ -214,13 +314,25 @@ def full_stability_analysis(
         witness_reports, prosecution_base_confidence, defense_base_confidence,
     )
 
-    # Combined robustness: average of margin-based and perturbation-based scores
+    # Sensitivity: identify pivotal witnesses via leave-one-out analysis
+    sensitivity = sensitivity_analysis(
+        witness_reports, prosecution_base_confidence, defense_base_confidence,
+    )
+
+    # Combined robustness: weighted average of margin, perturbation, and sensitivity scores
     margin_robustness = min(margin["margin"] / 0.3, 1.0)  # Normalize: 0.3 margin = max
-    combined = round((margin_robustness + stability["stability_score"]) / 2, 4)
+    sensitivity_robustness = 1.0 - sensitivity["fragility_score"]
+    combined = round(
+        0.35 * margin_robustness
+        + 0.40 * stability["stability_score"]
+        + 0.25 * sensitivity_robustness,
+        4,
+    )
 
     return {
         "evidence_margin": margin,
         "perturbation_stability": stability,
+        "sensitivity": sensitivity,
         "combined_robustness": combined,
         "verdict_is_robust": combined >= 0.7,
     }
