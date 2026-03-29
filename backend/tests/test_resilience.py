@@ -142,3 +142,25 @@ class TestCircuitBreaker:
         assert cb.state == CircuitState.OPEN
         await asyncio.sleep(0.02)
         assert cb.state == CircuitState.HALF_OPEN
+
+    def test_summary_returns_status(self):
+        cb = CircuitBreaker(failure_threshold=5, recovery_timeout=30.0, name="llm")
+        s = cb.summary()
+        assert s["name"] == "llm"
+        assert s["state"] == "closed"
+        assert s["failure_count"] == 0
+        assert s["failure_threshold"] == 5
+
+    @pytest.mark.asyncio
+    async def test_summary_reflects_failures(self):
+        cb = CircuitBreaker(failure_threshold=3, recovery_timeout=60.0, name="test")
+
+        async def fail():
+            raise RuntimeError("error")
+
+        with pytest.raises(RuntimeError):
+            await cb.call(fail)
+
+        s = cb.summary()
+        assert s["failure_count"] == 1
+        assert s["state"] == "closed"
