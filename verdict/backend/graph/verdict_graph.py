@@ -642,6 +642,15 @@ def _calibrate_from_witnesses(
                 was_correct=was_correct,
             )
 
+    # After recording enough data, fit Platt scaling so calibrate_confidence()
+    # can correct raw scores in future pipeline runs. This is a lightweight
+    # operation (200 gradient descent iterations on small data) and only
+    # updates coefficients when sufficient data has accumulated.
+    for agent_name in ("prosecutor", "defense"):
+        cal = calibration_tracker.get_agent_calibration(agent_name)
+        if cal and cal._total_predictions >= 10:
+            cal.fit_platt_scaling()
+
     logger.info(
         "Calibration update — prosecutor ECE: %.4f, defense ECE: %.4f",
         (calibration_tracker.get_agent_calibration("prosecutor") or type("", (), {"expected_calibration_error": 0})).expected_calibration_error,
@@ -675,6 +684,19 @@ async def _run_verdict(state: VerdictState, use_low_temp: bool = False) -> dict:
 
     # Calibrate agent confidence against witness ground truth
     _calibrate_from_witnesses(pro_arg, def_arg, reports, state.get("domain", "business"))
+
+    # Apply Platt-calibrated confidence correction when available.
+    # If enough historical data has been recorded, calibrate_confidence()
+    # maps raw agent confidence through a learned sigmoid to correct
+    # systematic over/underconfidence.
+    pro_cal = calibration_tracker.get_agent_calibration("prosecutor")
+    def_cal = calibration_tracker.get_agent_calibration("defense")
+    if pro_cal and hasattr(pro_cal, "_platt_a"):
+        calibrated_pro = pro_cal.calibrate_confidence(pro_arg.confidence)
+        logger.info("Platt-calibrated prosecutor confidence: %.3f → %.3f", pro_arg.confidence, calibrated_pro)
+    if def_cal and hasattr(def_cal, "_platt_a"):
+        calibrated_def = def_cal.calibrate_confidence(def_arg.confidence)
+        logger.info("Platt-calibrated defense confidence: %.3f → %.3f", def_arg.confidence, calibrated_def)
 
     verdict_path = "low_temp" if use_low_temp else "normal"
     with pipeline_metrics.track("verdict"):

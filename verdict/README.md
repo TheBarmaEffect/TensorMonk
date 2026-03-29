@@ -116,7 +116,7 @@ User Input (question + context + output_format)
 - Verdict sharing: `GET /api/verdict/{id}/share` generates short URL token, `GET /shared/{token}` retrieves results
 - Web search grounding: Research Agent queries Tavily (or DuckDuckGo fallback) for current facts before LLM analysis
 - Inline analysis in session results: argument quality, stability, and dependency graph computed and embedded in every completed session result — no separate endpoint required
-- 426 tests across 22 test files: schemas, graph, API, exports, resilience, cache, middleware, domain config, errors, metrics, security, prompts, integration, graph viz, session FSM, validators, event bus, calibration, LLM helpers (pytest)
+- 446 tests across 22 test files: schemas, graph, API, exports, resilience, cache, middleware, domain config, errors, metrics, security, prompts, integration, graph viz, session FSM, validators, event bus, calibration, LLM helpers (pytest)
 - Input validation on all API request models (question length, context length, format enum)
 - Rate limiting middleware: token bucket per IP with configurable RPM/burst
 - Request timing middleware: X-Request-ID + X-Response-Time headers on all responses
@@ -144,6 +144,10 @@ User Input (question + context + output_format)
 - Synthesis coverage assessment: measures objection coverage %, action time-boundedness, and strength delta
 - Argument dependency graph: DAG of claim dependencies with BFS cascading impact, coherence scoring, critical path detection — flows into cross-examination and witness prioritization
 - Verdict stability analysis: Monte Carlo perturbation testing (50 runs, ±10% witness confidence) with evidence margin and flip rate — flows into synthesis for stability-aware recommendations
+- Leave-one-out sensitivity analysis: identifies pivotal witnesses whose removal would flip the verdict, computes fragility score as fraction of pivotal witnesses
+- TF-IDF weighted claim similarity: replaces naive keyword overlap with smoothed TF-IDF cosine similarity for more accurate argument dependency detection
+- Topological sort (Kahn's algorithm): dependency-ordered claim traversal in argument graphs — foundations first, dependents last
+- Platt scaling feedback loop: auto-fits calibration coefficients after 10+ witness records, then applies sigmoid correction to raw agent confidence in future verdicts
 - Argument quality scoring: 5-dimension heuristic assessment (specificity, diversity, calibration, coherence, actionability) with A-D grading — flows through state to inform witness and synthesis behavior
 - Intelligence-driven routing: computed analysis (graph structure, quality scores, stability) persisted in VerdictState and used by downstream nodes for smarter cross-examination, impact-weighted witness prioritization, and stability-aware synthesis with contingency plans
 - Session lifecycle FSM: 5-state machine (created→running→complete/error/expired) with validated transitions wired into API routes
