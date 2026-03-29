@@ -115,14 +115,14 @@ All Tier 2 features were moved to functional status. The courtroom UI was never 
 
 | Test File | Count | Scope |
 |-----------|-------|-------|
-| test_schemas.py | 11 | Pydantic model validation, confidence bounds |
+| test_schemas.py | 13 | Pydantic model validation, confidence bounds |
 | test_graph.py | 31 | Graph topology, strip_authorship, conditional edges, adaptive temp, calibration, constitutional compliance |
 | test_api.py | 19 | API contracts, input validation, domain detection |
 | test_exports.py | 11 | PDF/DOCX/MD/JSON generation, domain themes |
-| test_resilience.py | 12 | Retry backoff, circuit breaker states |
-| test_cache.py | 10 | TTL expiration, key normalization, eviction |
+| test_resilience.py | 10 | Retry backoff, circuit breaker states |
+| test_cache.py | 9 | TTL expiration, key normalization, eviction |
 | test_middleware.py | 7 | Token bucket algorithm, exempt paths |
-| test_domain_config.py | 4 | YAML loading, constitutional overlays |
+| test_domain_config.py | 5 | YAML loading, constitutional overlays |
 | test_errors.py | 10 | Error hierarchy, JSON serialization |
 | test_metrics.py | 7 | Agent tracking, pipeline metrics |
 | test_security.py | 22 | XSS detection, input sanitization, security headers |
