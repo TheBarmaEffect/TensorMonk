@@ -15,10 +15,19 @@ All notable changes to the Verdict project.
 - **Constitutional Compliance Validation**: `_validate_constitutional_compliance()` checks that prosecution/defense arguments conform to their directives
 - **Pipeline-Wide Observability**: All 7 graph nodes emit start/complete/error events via async event bus with rich payloads
 
+### Added — Analytical Pipeline
+- **Argument Dependency Graph** (`utils/argument_graph.py`): DAG construction via keyword co-occurrence, BFS cascading impact analysis, coherence scoring (connected component ratio), foundation/critical/vulnerable claim detection
+- **Verdict Stability Analysis** (`utils/verdict_stability.py`): Monte Carlo perturbation testing (50 simulations, ±10% witness confidence), evidence margin computation, combined robustness scoring
+- **Argument Quality Scoring** (`utils/argument_quality.py`): 5-dimension heuristic assessment (evidence specificity, claim diversity, confidence calibration, opening coherence, actionability) with A-D letter grading
+- **Analysis API Endpoint**: `GET /api/verdict/{id}/analysis` — returns quality grades, dependency graphs, and stability analysis for completed sessions
+
 ### Testing
-- 298 total tests across 18 test files (up from 172)
+- 362 total tests across 21 test files (up from 172)
 - Added graph pipeline tests: adaptive temperature, calibration wiring, constitutional compliance (31 tests)
 - Added agent-level integration tests: claim overlap, research quality, synthesis coverage (31 tests)
+- Added argument graph tests: DAG construction, degree metrics, cascading impact (23 tests)
+- Added verdict stability tests: margin computation, Monte Carlo, flip rate bounds (17 tests)
+- Added argument quality tests: specificity, diversity, calibration, grading (24 tests)
 - Added event bus, calibration, validators, and session FSM tests
 
 ## [1.1.0] — 2026-03-29
