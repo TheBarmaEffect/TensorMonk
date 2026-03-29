@@ -12,8 +12,8 @@ Build a **multi-agent adversarial AI courtroom** that takes any decision or idea
 - Constitutional directives force Prosecutor to argue FOR and Defense to argue AGAINST
 
 ### 2. Confidence-Based Routing (ADR-002)
-- Three verdict paths: normal, low-confidence review (human-in-the-loop), hallucination guard
-- Witness confidence < 0.6 triggers `interrupt_before` for human review
+- Three verdict paths: normal, low-confidence review, hallucination guard (temperature=0.3)
+- Witness confidence < 0.6 routes to `verdict_with_review` node; `interrupt_before` enabled via flag
 - Confidence > 0.9 with majority overruled triggers low-temperature retry
 
 ### 3. Domain-Aware Overlays (ADR-003)
@@ -83,7 +83,7 @@ Build a **multi-agent adversarial AI courtroom** that takes any decision or idea
 | Centralized prompt templates | ✅ | `agents/prompts.py` with directive auditing |
 | Session analytics aggregation | ✅ | `GET /sessions/analytics` endpoint |
 | Keyboard shortcuts | ✅ | `useKeyboardShortcuts.js` with 6 shortcuts |
-| ARIA accessibility | ✅ | roles, labels, described-by across components |
+| ARIA accessibility | ✅ | roles, labels, described-by on LandingInput, MicButton, PipelineGraph |
 | Async event bus (Observer pattern) | ✅ | `utils/event_bus.py` with topic pub/sub |
 | Confidence calibration (ECE) | ✅ | `utils/confidence_calibration.py` per-agent tracking |
 | Domain-aware input validators | ✅ | `utils/validators.py` with quality scoring |
