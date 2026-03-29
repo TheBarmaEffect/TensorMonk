@@ -85,7 +85,10 @@ Build a **multi-agent adversarial AI courtroom** that takes any decision or idea
 | Argument strength analysis | ✅ | `judge.analyze_argument_strength()` pre-cross-examination |
 | Claim overlap detection | ✅ | `judge.detect_claim_overlaps()` keyword overlap + conflict scoring |
 | Constitutional compliance validation | ✅ | `_validate_constitutional_compliance()` directive enforcement |
-| 298 tests (unit + integration) | ✅ | 18 test files (pytest) |
+| Argument dependency graph (DAG) | ✅ | `utils/argument_graph.py` — BFS cascading impact, coherence scoring |
+| Verdict stability perturbation analysis | ✅ | `utils/verdict_stability.py` — 50-run Monte Carlo, evidence margin |
+| Argument quality scoring (A-D grades) | ✅ | `utils/argument_quality.py` — 5-dimension heuristic assessment |
+| 362 tests (unit + integration) | ✅ | 21 test files (pytest) |
 
 ### Pre-Committed Cut Rule
 > "Analytics charts are cut before the courtroom UI is degraded."
@@ -133,7 +136,10 @@ All Tier 2 features were moved to functional status. The courtroom UI was never 
 | test_validators.py | 22 | Question quality, research completeness, format-domain fit |
 | test_event_bus.py | 20 | Pub/sub delivery, topic matching, priority ordering |
 | test_calibration.py | 19 | ECE computation, overconfidence detection, domain tracking |
-| **Total** | **298** | |
+| test_argument_graph.py | 23 | DAG construction, degree metrics, coherence, cascading impact |
+| test_verdict_stability.py | 17 | Evidence margin, perturbation Monte Carlo, flip rate bounds |
+| test_argument_quality.py | 24 | Specificity, diversity, calibration, coherence, grading |
+| **Total** | **362** | |
 
 ## Technical Decisions
 
