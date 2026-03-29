@@ -38,7 +38,9 @@ SESSION_DIR.mkdir(parents=True, exist_ok=True)
 sessions: dict[str, dict] = {}
 
 # TTL cache for domain detection — avoids redundant LLM calls for similar questions
-_domain_cache = TTLCache(ttl_seconds=300, max_entries=200)
+DOMAIN_CACHE_TTL_SECONDS: int = 300   # 5 minutes
+DOMAIN_CACHE_MAX_ENTRIES: int = 200
+_domain_cache = TTLCache(ttl_seconds=DOMAIN_CACHE_TTL_SECONDS, max_entries=DOMAIN_CACHE_MAX_ENTRIES)
 
 
 def _persist_session(session_id: str, session: dict) -> None:
@@ -541,8 +543,8 @@ async def stream_verdict(websocket: WebSocket, session_id: str):
             pipeline_task.cancel()
         try:
             await websocket.close()
-        except Exception:
-            pass
+        except Exception as close_err:
+            logger.debug("WebSocket close failed (expected if already disconnected): %s", close_err)
 
 
 # ---------------------------------------------------------------------------
@@ -749,7 +751,8 @@ async def get_shared_verdict(share_token: str):
                     "output_format": session.get("output_format", "executive"),
                     "result": session.get("result"),
                 }
-        except Exception:
+        except Exception as read_err:
+            logger.warning("Failed to read session file %s: %s", path.name, read_err)
             continue
 
     raise HTTPException(status_code=404, detail="Shared verdict not found")

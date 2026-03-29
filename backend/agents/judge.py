@@ -30,6 +30,14 @@ from utils.llm_helpers import parse_llm_json, emit_thinking_phases, create_llm
 
 logger = logging.getLogger(__name__)
 
+# ── Evidence scoring constants ─────────────────────────────────────────────
+# These control how witness verdicts adjust the quantitative scores used
+# by the Judge when delivering the final ruling.
+SUSTAINED_BOOST_MULTIPLIER: float = 0.1     # Confidence boost for sustained claims
+OVERRULED_PENALTY_MULTIPLIER: float = 0.15  # Confidence penalty for overruled claims
+HIGH_CONFIDENCE_THRESHOLD: float = 0.8      # Claims above this are "high confidence"
+DEFAULT_OVERLAP_THRESHOLD: float = 0.3      # Keyword overlap ratio for claim matching
+
 CROSS_EXAM_SYSTEM_PROMPT = """You are the Judge in an adversarial AI courtroom. You have received arguments from both the Prosecution (arguing FOR) and Defense (arguing AGAINST) a decision.
 
 Identify the 3 most contested factual claims — claims where both sides make opposing assertions with evidence. For each contested claim, specify which claim IDs are in conflict and what type of verification is needed.
@@ -99,8 +107,8 @@ class JudgeAgent:
         def_avg = sum(def_confs) / len(def_confs) if def_confs else 0.0
 
         # Find high-confidence claims on both sides (likely contested areas)
-        pro_high = [c for c in prosecutor_argument.claims if c.confidence >= 0.8]
-        def_high = [c for c in defense_argument.claims if c.confidence >= 0.8]
+        pro_high = [c for c in prosecutor_argument.claims if c.confidence >= HIGH_CONFIDENCE_THRESHOLD]
+        def_high = [c for c in defense_argument.claims if c.confidence >= HIGH_CONFIDENCE_THRESHOLD]
 
         return {
             "prosecution": {
@@ -126,7 +134,7 @@ class JudgeAgent:
         self,
         prosecutor_argument: Argument,
         defense_argument: Argument,
-        overlap_threshold: float = 0.3,
+        overlap_threshold: float = DEFAULT_OVERLAP_THRESHOLD,
     ) -> list[dict]:
         """Detect overlapping claims between prosecution and defense.
 
@@ -445,7 +453,7 @@ class JudgeAgent:
             adj_target = "prosecutor" if is_pro_claim else "defense" if is_def_claim else "unknown"
 
             if w.verdict_on_claim == "sustained":
-                boost = 0.1 * w.confidence
+                boost = SUSTAINED_BOOST_MULTIPLIER * w.confidence
                 if is_pro_claim:
                     pro_score = min(1.0, pro_score + boost)
                 elif is_def_claim:
@@ -455,7 +463,7 @@ class JudgeAgent:
                     "side": adj_target, "adjustment": f"+{boost:.3f}",
                 })
             elif w.verdict_on_claim == "overruled":
-                penalty = 0.15 * w.confidence
+                penalty = OVERRULED_PENALTY_MULTIPLIER * w.confidence
                 if is_pro_claim:
                     pro_score = max(0.0, pro_score - penalty)
                 elif is_def_claim:
