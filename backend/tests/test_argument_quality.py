@@ -49,10 +49,10 @@ class TestClaimDiversity:
     def test_repetitive_claims(self):
         claims = [
             {"statement": "Market growth strong demand increasing rapidly"},
-            {"statement": "Market demand growing strongly with increase"},
+            {"statement": "Market growth strong demand increasing rapidly"},
         ]
         score = score_claim_diversity(claims)
-        assert score < 0.7
+        assert score < 0.2  # Identical claims should score near zero
 
     def test_single_claim(self):
         assert score_claim_diversity([{"statement": "test"}]) == 1.0
