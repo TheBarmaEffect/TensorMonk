@@ -1,19 +1,30 @@
-"""Confidence calibration — tracks agent confidence accuracy over time.
+"""Confidence calibration — tracks and corrects agent confidence accuracy.
 
-Implements Bayesian-inspired calibration tracking for agent confidence scores.
-A well-calibrated agent should have its stated confidence match its actual
-accuracy: when it says "0.8 confidence", it should be correct ~80% of the time.
+Implements post-hoc calibration tracking and correction for agent confidence
+scores. A well-calibrated agent should have its stated confidence match its
+actual accuracy: when it says "0.8 confidence", it should be correct ~80%.
+
+Three calibration techniques:
+1. **ECE measurement**: Binned Expected Calibration Error (Guo et al. ICML 2017)
+2. **Platt scaling**: Logistic regression fit (sigmoid) to map raw → calibrated
+   confidence via gradient descent on cross-entropy loss
+3. **Isotonic regression**: Pool-Adjacent-Violators Algorithm (PAVA) for
+   non-parametric monotone calibration — more flexible than Platt but needs
+   more data
 
 This module tracks calibration curves per agent per domain, enabling:
 - Detection of overconfident agents (confidence > accuracy)
 - Detection of underconfident agents (confidence < accuracy)
+- Post-hoc correction via Platt scaling or isotonic regression
 - Domain-specific calibration adjustments
-- Historical accuracy trend analysis
 
-Calibration bins: Confidence scores are bucketed into 10 bins (0.0-0.1, 0.1-0.2, etc.)
+Calibration bins: Confidence scores are bucketed into 10 bins (0.0-0.1, etc.)
 For each bin, we track: number of predictions and number of correct outcomes.
 
-Reference: Guo et al., "On Calibration of Modern Neural Networks" (ICML 2017)
+References:
+- Guo et al., "On Calibration of Modern Neural Networks" (ICML 2017)
+- Platt, "Probabilistic Outputs for SVMs" (1999)
+- Zadrozny & Elkan, "Transforming Classifier Scores into Calibration" (KDD 2002)
 """
 
 import logging
@@ -156,9 +167,158 @@ class AgentCalibration:
                 })
         return curve
 
+    def fit_platt_scaling(self) -> dict[str, Any]:
+        """Fit Platt scaling to transform raw confidence → calibrated probability.
+
+        Platt scaling fits a logistic regression (sigmoid) to the calibration data:
+            P_calibrated = 1 / (1 + exp(-(a * P_raw + b)))
+
+        Parameters a, b are learned via gradient descent on cross-entropy loss
+        over the (confidence, correctness) pairs stored in calibration bins.
+
+        Reference: Platt, "Probabilistic Outputs for SVMs" (1999)
+
+        Returns:
+            Dict with coefficients a, b, final loss, and fitted flag.
+        """
+        # Collect (confidence, was_correct) pairs from all bins
+        pairs: list[tuple[float, int]] = []
+        for b in self.bins:
+            if b.total_count > 0:
+                avg_conf = b.avg_confidence
+                pairs.extend([(avg_conf, 1)] * b.correct_count)
+                pairs.extend([(avg_conf, 0)] * (b.total_count - b.correct_count))
+
+        if len(pairs) < 5:
+            return {"fitted": False, "reason": "insufficient data (need >= 5 samples)"}
+
+        # Gradient descent on cross-entropy loss
+        a, b_coeff = 1.0, 0.0
+        lr = 0.01
+        n = len(pairs)
+
+        for _ in range(200):
+            grad_a, grad_b = 0.0, 0.0
+            loss = 0.0
+
+            for conf, y in pairs:
+                z = a * conf + b_coeff
+                # Numerically stable sigmoid
+                p = 1.0 / (1.0 + math.exp(-max(-500, min(500, z))))
+                error = p - y
+                grad_a += error * conf
+                grad_b += error
+                loss -= y * math.log(p + 1e-12) + (1 - y) * math.log(1 - p + 1e-12)
+
+            a -= lr * grad_a / n
+            b_coeff -= lr * grad_b / n
+
+        self._platt_a = a
+        self._platt_b = b_coeff
+
+        logger.info(
+            "Platt scaling fit for %s: a=%.4f, b=%.4f, loss=%.4f",
+            self.agent_name, a, b_coeff, loss / n,
+        )
+
+        return {
+            "fitted": True,
+            "method": "platt",
+            "a": round(a, 4),
+            "b": round(b_coeff, 4),
+            "loss": round(loss / n, 4),
+            "samples": n,
+        }
+
+    def fit_isotonic_regression(self) -> dict[str, Any]:
+        """Fit isotonic (monotone non-decreasing) calibration via PAVA.
+
+        The Pool-Adjacent-Violators Algorithm (PAVA) iteratively merges
+        adjacent bins where accuracy violates monotonicity, producing a
+        non-decreasing calibration curve. More flexible than Platt scaling
+        (non-parametric) but requires more data.
+
+        Reference: Zadrozny & Elkan, "Transforming Classifier Scores" (KDD 2002)
+
+        Returns:
+            Dict with calibrated values, violations fixed, and fitted flag.
+        """
+        # Extract non-empty bins sorted by confidence
+        bins_data = [
+            (b.avg_confidence, b.accuracy, b.total_count)
+            for b in self.bins
+            if b.total_count > 0
+        ]
+
+        if len(bins_data) < 3:
+            return {"fitted": False, "reason": "insufficient bins (need >= 3 non-empty)"}
+
+        # PAVA: merge adjacent blocks that violate monotonicity
+        # Each block: (weighted_sum, total_weight)
+        blocks: list[tuple[float, int]] = [
+            (acc * cnt, cnt) for _, acc, cnt in bins_data
+        ]
+
+        violations_fixed = 0
+        i = 0
+        while i < len(blocks) - 1:
+            avg_i = blocks[i][0] / blocks[i][1]
+            avg_next = blocks[i + 1][0] / blocks[i + 1][1]
+
+            if avg_i > avg_next:
+                # Merge: pool adjacent violators
+                merged_sum = blocks[i][0] + blocks[i + 1][0]
+                merged_weight = blocks[i][1] + blocks[i + 1][1]
+                blocks[i] = (merged_sum, merged_weight)
+                blocks.pop(i + 1)
+                violations_fixed += 1
+                i = max(0, i - 1)  # Backtrack to check earlier blocks
+            else:
+                i += 1
+
+        # Extract calibrated probabilities
+        calibrated = [round(s / w, 4) for s, w in blocks]
+
+        self._isotonic_values = calibrated
+        self._isotonic_bins = len(blocks)
+
+        logger.info(
+            "Isotonic regression fit for %s: %d blocks, %d violations fixed",
+            self.agent_name, len(blocks), violations_fixed,
+        )
+
+        return {
+            "fitted": True,
+            "method": "isotonic",
+            "calibrated_probabilities": calibrated,
+            "blocks": len(blocks),
+            "violations_fixed": violations_fixed,
+        }
+
+    def calibrate_confidence(self, raw_confidence: float) -> float:
+        """Apply learned Platt scaling correction to a raw confidence score.
+
+        If Platt coefficients have been fit, applies the sigmoid transform:
+            P_calibrated = 1 / (1 + exp(-(a * P_raw + b)))
+
+        Falls back to raw confidence if no correction is available.
+
+        Args:
+            raw_confidence: The agent's uncalibrated confidence [0.0, 1.0].
+
+        Returns:
+            Calibrated confidence score.
+        """
+        a = getattr(self, "_platt_a", None)
+        b = getattr(self, "_platt_b", None)
+        if a is not None and b is not None:
+            z = a * raw_confidence + b
+            return 1.0 / (1.0 + math.exp(-max(-500, min(500, z))))
+        return raw_confidence
+
     def summary(self) -> dict[str, Any]:
         """Summary statistics for this agent's calibration."""
-        return {
+        result = {
             "agent": self.agent_name,
             "total_predictions": self._total_predictions,
             "ece": round(self.expected_calibration_error, 4),
@@ -166,6 +326,13 @@ class AgentCalibration:
             "is_underconfident": self.is_underconfident,
             "calibration_curve": self.calibration_curve(),
         }
+        # Include Platt coefficients if fitted
+        if hasattr(self, "_platt_a"):
+            result["platt_scaling"] = {
+                "a": round(self._platt_a, 4),
+                "b": round(self._platt_b, 4),
+            }
+        return result
 
 
 class CalibrationTracker:
