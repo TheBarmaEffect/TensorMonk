@@ -1,56 +1,34 @@
-"""Witness Agent factory — spawns specialist witnesses to verify contested claims."""
+"""Witness Agent factory — spawns specialist witnesses to verify contested claims.
+
+Constitutional role: Neutral verification. Witnesses evaluate claims objectively
+without knowledge of which agent (Prosecutor or Defense) made the claim.
+
+Three specialist types:
+- FactWitness: Verifies factual accuracy of assertions
+- DataWitness: Evaluates statistical claims and data quality
+- PrecedentWitness: Validates historical precedent citations
+
+Uses low temperature (0.3) for deterministic, grounded verification.
+"""
 
 import json
 import logging
 from typing import Callable, Literal, Optional
 
-from langchain_groq import ChatGroq
 from langchain_core.messages import SystemMessage, HumanMessage
 
-from config import settings
+from agents.prompts import WITNESS_SYSTEM
 from models.schemas import WitnessReport, StreamEvent
+from utils.resilience import retry_with_backoff
+from utils.llm_helpers import parse_llm_json, create_llm
 
 logger = logging.getLogger(__name__)
-
-WITNESS_PROMPTS: dict[str, str] = {
-    "fact": (
-        "You are a Fact Witness in an AI courtroom. You verify factual claims. "
-        "Research this claim and determine if it is accurate, partially accurate, or false. "
-        "Cite your reasoning with specific facts."
-    ),
-    "data": (
-        "You are a Data Witness in an AI courtroom. You verify data and statistical claims. "
-        "Evaluate the quality, recency, and relevance of data cited in this claim. "
-        "Identify any cherry-picked statistics, outdated figures, or misrepresentations."
-    ),
-    "precedent": (
-        "You are a Precedent Witness in an AI courtroom. You verify precedent-based claims. "
-        "Evaluate whether the historical precedents cited actually support this claim in this context. "
-        "Identify false analogies or missing context."
-    ),
-}
-
-WITNESS_OUTPUT_FORMAT = """
-Output as JSON:
-{
-  "resolution": "string — your detailed finding on this claim (3-5 sentences)",
-  "confidence": 0.0-1.0,
-  "verdict_on_claim": "sustained | overruled | inconclusive"
-}
-
-Return ONLY valid JSON. No markdown, no code fences."""
-
 
 class WitnessAgent:
     """Factory that spawns specialist witnesses to verify claims."""
 
     def __init__(self) -> None:
-        self.llm = ChatGroq(
-            model="llama-3.3-70b-versatile",
-            temperature=0.3,
-            max_tokens=1024,
-            api_key=settings.groq_api_key,
-        )
+        self.llm = create_llm(temperature=0.3, max_tokens=1024)
 
     async def verify_claim(
         self,
@@ -82,8 +60,7 @@ class WitnessAgent:
                 )
             )
 
-        system_prompt = WITNESS_PROMPTS.get(witness_type, WITNESS_PROMPTS["fact"])
-        system_prompt += WITNESS_OUTPUT_FORMAT
+        system_prompt = WITNESS_SYSTEM.format(witness_type=witness_type)
 
         prompt = (
             f"CLAIM TO VERIFY:\n"
@@ -98,11 +75,11 @@ class WitnessAgent:
         ]
 
         try:
-            full_response = ""
-            async for chunk in self.llm.astream(messages):
-                token = chunk.content
-                if token:
-                    full_response += token
+            response = await retry_with_backoff(
+                self.llm.ainvoke, messages,
+                max_retries=2, base_delay=0.5, operation_name=f"Witness ({witness_type})",
+            )
+            full_response = response.content
 
             data = self._parse_json(full_response)
 
@@ -154,16 +131,9 @@ class WitnessAgent:
             raise
 
     def _parse_json(self, response: str) -> dict:
-        """Parse JSON from LLM response."""
-        cleaned = response.strip()
-        if cleaned.startswith("```"):
-            cleaned = cleaned.split("\n", 1)[1] if "\n" in cleaned else cleaned[3:]
-            if cleaned.endswith("```"):
-                cleaned = cleaned[:-3]
-            cleaned = cleaned.strip()
-
-        try:
-            return json.loads(cleaned)
-        except json.JSONDecodeError:
-            logger.warning("Failed to parse witness JSON")
-            return {"resolution": cleaned[:500], "confidence": 0.5, "verdict_on_claim": "inconclusive"}
+        """Parse JSON from LLM response — delegates to shared utility."""
+        return parse_llm_json(
+            response,
+            fallback={"resolution": response.strip()[:500], "confidence": 0.5, "verdict_on_claim": "inconclusive"},
+            operation_name="Witness",
+        )

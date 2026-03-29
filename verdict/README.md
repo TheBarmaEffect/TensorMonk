@@ -68,8 +68,8 @@ User Input (question + context + output_format)
 - **Constitutional Directives**: Prosecutor MUST argue FOR, Defense MUST argue AGAINST, regardless of personal assessment. Enforced via system prompts.
 - **Adversarial Isolation**: Prosecutor and defense run in parallel and never see each other's output. The judge is the first node to receive both.
 - **Hallucination Guard**: Agent outputs are validated against Pydantic schemas. Malformed JSON triggers a retry with `temperature=0.3` for deterministic recovery.
-- **Checkpointing**: LangGraph `AsyncRedisSaver` for production fault tolerance (falls back to `MemorySaver` when `REDIS_URL` is unset). State persisted at every node for resume/replay.
-- **Human-in-the-Loop**: `interrupt_before=['verdict']` pauses the graph when average witness confidence < 0.6, allowing human review before the final ruling.
+- **Checkpointing**: LangGraph `MemorySaver` for development; `AsyncRedisSaver` activates when `REDIS_URL` is set (Redis path is implemented but untested in production — development uses MemorySaver exclusively). State persisted at every node for resume/replay.
+- **Human-in-the-Loop**: `interrupt_before=['verdict_with_review']` activates via `INTERRUPT_BEFORE_VERDICT=true` env var — the confidence gate routes low-confidence verdicts to a review node where human reviewers can intervene before the final ruling.
 - **Dynamic Witness Spawning**: Conditional edges route through `_should_spawn_witnesses` — the Judge's cross-examination determines which claims are contested and what witness type to spawn for each. If no claims are contested, witnesses are skipped entirely.
 - **Domain-Aware Constitutional Overlays**: Loaded from `backend/config/domains.yaml` at runtime — each domain defines argumentation constraints, evidence hierarchy, and few-shot synthesis anchors.
 
@@ -78,7 +78,7 @@ User Input (question + context + output_format)
 | Layer | Technology |
 |-------|------------|
 | Backend framework | FastAPI |
-| Agent orchestration | LangGraph (StateGraph + AsyncRedisSaver / MemorySaver) |
+| Agent orchestration | LangGraph (StateGraph + MemorySaver; AsyncRedisSaver when REDIS_URL set) |
 | LLM inference | Groq (Llama 3.3 70B Versatile) |
 | Data models | Pydantic v2 with field validators |
 | Real-time streaming | WebSocket (native FastAPI) |
@@ -106,8 +106,8 @@ User Input (question + context + output_format)
 - Domain-aware constitutional overlays loaded from `backend/config/domains.yaml` at runtime
 - Few-shot synthesis anchors per domain (e.g., "Week 1-2: Implement WorkOS for enterprise SSO")
 - Parallel Prosecutor + Defense execution via `asyncio.gather`
-- LangGraph StateGraph with `MemorySaver` checkpointing (`AsyncRedisSaver` when `REDIS_URL` set)
-- Confidence-based routing: 3 verdict paths (normal, low-confidence review, hallucination guard at `temperature=0.3`)
+- LangGraph StateGraph with `MemorySaver` checkpointing (conditional `AsyncRedisSaver` when `REDIS_URL` set — Redis path implemented but not production-tested)
+- Multi-factor confidence gate: 4-factor routing (domain-adjusted threshold, witness agreement ratio, confidence variance, overrule detection) with 3 verdict paths (normal, low-confidence review, hallucination guard at `temperature=0.3`)
 - Hallucination guard — agent outputs validated against Pydantic v2 schemas, malformed JSON triggers `temperature=0.3` retry
 - Real-time WebSocket streaming with typed `StreamEvent` objects
 - Export: Markdown, PDF (via fpdf2), DOCX (via python-docx), and structured JSON — all endpoints functional
@@ -115,25 +115,40 @@ User Input (question + context + output_format)
 - Session history: persistent JSON-backed session store via `GET /api/verdict/sessions/history`, displayed in frontend `SessionHistory` component
 - Verdict sharing: `GET /api/verdict/{id}/share` generates short URL token, `GET /shared/{token}` retrieves results
 - Web search grounding: Research Agent queries Tavily (or DuckDuckGo fallback) for current facts before LLM analysis
-- 273 tests across 18 test files: schemas, graph, API, exports, resilience, cache, middleware, domain config, errors, metrics, security, prompts, integration, graph viz, session FSM, validators, event bus, calibration (pytest)
+- Inline analysis in session results: argument quality, stability, and dependency graph computed and embedded in every completed session result — no separate endpoint required
+- 426 tests across 22 test files: schemas, graph, API, exports, resilience, cache, middleware, domain config, errors, metrics, security, prompts, integration, graph viz, session FSM, validators, event bus, calibration, LLM helpers (pytest)
 - Input validation on all API request models (question length, context length, format enum)
 - Rate limiting middleware: token bucket per IP with configurable RPM/burst
 - Request timing middleware: X-Request-ID + X-Response-Time headers on all responses
 - Retry with exponential backoff + jitter for transient LLM failures
-- Circuit breaker (CLOSED/OPEN/HALF_OPEN) for external service fault tolerance
+- Circuit breaker (CLOSED/OPEN/HALF_OPEN) wired into LLM retry path via `call_llm_with_resilience()` for external service fault tolerance
 - TTL cache for domain detection to reduce redundant LLM calls
 - Deep health check: Groq API, Redis, session store, uptime reporting
 - Graceful startup/shutdown lifecycle handlers with structured logging
 - Session-aware structured logging via contextvars for async correlation IDs
 - Structured error hierarchy: VerdictError → AgentError/SessionError/ExportError with JSON serialization
-- Pipeline performance metrics: per-agent durations, success/failure counts, exposed via `/metrics` endpoint
+- Pipeline performance metrics: per-agent durations with p50/p95/p99 percentiles, error rates, and pipeline-wide aggregates exposed via `/metrics` endpoint
+- Pipeline progress tracking: `/status` endpoint returns completion percentage, current stage, stages remaining, and estimated time to completion
 - Security middleware: XSS pattern detection, HTML entity sanitization, body size limits, security headers
-- Centralized prompt templates: all agent prompts in `agents/prompts.py` with constitutional directive auditing
+- Shared LLM utilities: `utils/llm_helpers.py` — all 6 agents use `parse_llm_json()`, `create_llm()`, `emit_thinking_phases()`, and `retry_with_low_temperature()` (eliminated ~160 lines of duplicated boilerplate)
+- Centralized prompt templates: ALL 6 agent system prompts defined in `agents/prompts.py` — zero inline prompt definitions, single source of truth for constitutional directives
 - Session analytics: aggregate ruling distribution, domain breakdown, format usage via `/sessions/analytics`
 - Pipeline graph visualization: structured topology generation with dynamic witness nodes and routing paths
 - Async event bus: topic-based pub/sub with fire-and-forget delivery for pipeline observability
-- Confidence calibration: Bayesian ECE tracking per agent per domain with overconfidence detection
-- Domain-aware input validators: question quality scoring, research package completeness, format-domain compatibility
+- Confidence calibration: binned ECE tracking per agent per domain with Platt scaling and isotonic regression (PAVA) for post-hoc correction
+- Witness-calibrated confidence: `_calibrate_from_witnesses()` uses witness verdicts as ground truth for per-agent ECE tracking; supports Platt scaling and isotonic regression (PAVA) for post-hoc confidence correction
+- Adaptive temperature: `_adaptive_temperature()` adjusts prosecutor/defense LLM temperature based on research quality scores
+- Pipeline-wide observability: all 7 graph nodes emit start/complete/error events via event bus with rich payloads (confidence, claim counts, ruling outcomes)
+- Research quality scoring: 5-dimension assessment (breadth, depth, grounding, balance, completeness) with weighted overall score
+- Witness-weighted evidence scoring: Judge computes quantitative pro/defense scores adjusted by witness verdicts (sustained/overruled)
+- Synthesis coverage assessment: measures objection coverage %, action time-boundedness, and strength delta
+- Argument dependency graph: DAG of claim dependencies with BFS cascading impact, coherence scoring, critical path detection — flows into cross-examination and witness prioritization
+- Verdict stability analysis: Monte Carlo perturbation testing (50 runs, ±10% witness confidence) with evidence margin and flip rate — flows into synthesis for stability-aware recommendations
+- Argument quality scoring: 5-dimension heuristic assessment (specificity, diversity, calibration, coherence, actionability) with A-D grading — flows through state to inform witness and synthesis behavior
+- Intelligence-driven routing: computed analysis (graph structure, quality scores, stability) persisted in VerdictState and used by downstream nodes for smarter cross-examination, impact-weighted witness prioritization, and stability-aware synthesis with contingency plans
+- Session lifecycle FSM: 5-state machine (created→running→complete/error/expired) with validated transitions wired into API routes
+- Domain-aware input validators: question quality scoring, research package completeness, format-domain compatibility — wired into API and pipeline
+- Quality-aware synthesis: argument quality scores feed into the synthesis prompt, weighting the stronger side's arguments
 - py.typed PEP 561 marker for static type checking support
 
 **Frontend (fully functional)**
@@ -160,18 +175,18 @@ User Input (question + context + output_format)
 - Docker + docker-compose with Redis service for local development
 - Vercel rewrites proxy `/api/*` to HF Space backend; WebSocket connects directly via `VITE_WS_URL`
 
-## Scope-Trimmed (time constraints — pre-committed Tier 2 cut rule)
+## Scope Management
 
-The following were planned but explicitly cut per the master plan's pre-committed
-Tier 2 cut rule: *"analytics charts are cut before the courtroom UI is degraded."*
+The master plan defined a cut rule: *"analytics charts are cut before the courtroom UI is degraded."*
+All originally-at-risk features were completed and promoted to Tier 1:
 
-| Feature | Status | Reason for cut |
-|---------|--------|----------------|
-| Recharts analytics panel | ✅ Functional — `AnalyticsPanel.jsx` wired to live `agentStates`, `verdict`, `synthesis` | Moved to Tier 1 |
-| Verdict history persistence | ✅ Functional — JSON file persistence in `data/sessions/` | Moved to Tier 1 |
-| Voice input | ✅ Functional — `MicButton.jsx` + `useVoiceInput.js` | Moved to Tier 1; works in Chrome/Edge |
-| Verdict sharing URL | ✅ Functional — `GET /{id}/share` + `GET /shared/{token}` | Moved to Tier 1 |
-| DOCX export | ✅ Functional — `GET /api/verdict/{id}/export/docx` | Moved to Tier 1 |
+| Feature | Evidence |
+|---------|----------|
+| Recharts analytics panel | `AnalyticsPanel.jsx` wired to live agent data |
+| Verdict history persistence | JSON file store in `data/sessions/` |
+| Voice input | `MicButton.jsx` + `useVoiceInput.js` (Chrome/Edge) |
+| Verdict sharing URL | `GET /{id}/share` + `GET /shared/{token}` |
+| DOCX export | `GET /api/verdict/{id}/export/docx` |
 
 ## Quick Start
 
@@ -236,6 +251,7 @@ docker-compose up --build
 | `POST` | `/api/verdict/{id}/followup` | Context-aware follow-up Q&A |
 | `GET` | `/api/verdict/{id}/share` | Generate shareable verdict URL token |
 | `GET` | `/api/verdict/shared/{token}` | Retrieve verdict by share token |
+| `GET` | `/api/verdict/{id}/analysis` | Argument quality, stability, and dependency graph analysis |
 | `GET` | `/api/verdict/{id}/graph` | Pipeline graph visualization for session |
 | `GET` | `/api/verdict/graph/topology` | Static pipeline topology diagram |
 | `GET` | `/api/verdict/sessions/analytics` | Aggregate session analytics |
@@ -291,6 +307,8 @@ Connect to `ws://localhost:8000/api/verdict/{session_id}/stream` to receive real
 |----------|----------|---------|-------------|
 | `GROQ_API_KEY` | Yes | — | Groq API key for LLM inference |
 | `REDIS_URL` | No | — | Redis connection string for production checkpointing (`redis://host:6379/0`) |
+| `INTERRUPT_BEFORE_VERDICT` | No | — | Set to `true` to enable human-in-the-loop review before verdict |
+| `TAVILY_API_KEY` | No | — | Tavily API key for high-quality web search grounding (falls back to DuckDuckGo) |
 | `LOG_LEVEL` | No | `INFO` | Python logging level |
 
 ---
