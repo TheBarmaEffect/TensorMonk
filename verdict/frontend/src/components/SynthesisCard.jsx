@@ -45,7 +45,7 @@ export default function SynthesisCard({ synthesis }) {
         </motion.div>
         <div>
           <p className="text-[10px] font-mono text-[var(--text-muted)] uppercase tracking-[0.2em] mb-0.5">Final Synthesis</p>
-          <h3 className="text-lg font-semibold text-emerald-400 tracking-tight">The Battle-Tested Version</h3>
+          <h3 className="text-lg font-semibold text-emerald-400 tracking-tight" style={{ fontFamily: 'var(--font-heading)' }}>The Battle-Tested Version</h3>
         </div>
       </motion.div>
 
