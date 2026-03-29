@@ -6,9 +6,13 @@ from graph.verdict_graph import (
     strip_authorship,
     _should_spawn_witnesses,
     _confidence_gate,
+    _adaptive_temperature,
+    _calibrate_from_witnesses,
     LOW_CONFIDENCE_THRESHOLD,
     HIGH_CONFIDENCE_OVERRULE_THRESHOLD,
 )
+from models.schemas import Argument, Claim, WitnessReport
+from utils.confidence_calibration import CalibrationTracker
 
 
 class TestStripAuthorship:
@@ -108,3 +112,135 @@ class TestGraphTopology:
     def test_thresholds_are_correct(self):
         assert LOW_CONFIDENCE_THRESHOLD == 0.6
         assert HIGH_CONFIDENCE_OVERRULE_THRESHOLD == 0.9
+
+
+class TestAdaptiveTemperature:
+    """Verify adaptive temperature adjusts based on research quality."""
+
+    def test_default_when_no_quality_scores(self):
+        """Returns base_temp when research has no quality data."""
+        assert _adaptive_temperature({}) == 0.7
+        assert _adaptive_temperature({"summary": "test"}) == 0.7
+
+    def test_lower_temp_for_high_quality_research(self):
+        """High quality research should produce lower temperature."""
+        pkg = {"_quality_scores": {"overall": 0.9, "grounding": 0.8}}
+        temp = _adaptive_temperature(pkg)
+        assert temp < 0.7  # Lower than default
+        assert temp >= 0.4  # Within bounds
+
+    def test_higher_temp_for_low_quality_research(self):
+        """Low quality research should produce higher temperature."""
+        pkg = {"_quality_scores": {"overall": 0.2, "grounding": 0.0}}
+        temp = _adaptive_temperature(pkg)
+        assert temp > 0.7  # Higher than default
+
+    def test_clamped_to_bounds(self):
+        """Temperature should always be between 0.4 and 0.85."""
+        # Extreme high quality
+        pkg_high = {"_quality_scores": {"overall": 1.0, "grounding": 1.0}}
+        assert _adaptive_temperature(pkg_high) >= 0.4
+
+        # Extreme low quality
+        pkg_low = {"_quality_scores": {"overall": 0.0, "grounding": 0.0}}
+        assert _adaptive_temperature(pkg_low) <= 0.85
+
+    def test_grounding_reduces_temperature(self):
+        """Fully grounded research should reduce temperature."""
+        pkg_no_ground = {"_quality_scores": {"overall": 0.5, "grounding": 0.0}}
+        pkg_grounded = {"_quality_scores": {"overall": 0.5, "grounding": 1.0}}
+        assert _adaptive_temperature(pkg_grounded) < _adaptive_temperature(pkg_no_ground)
+
+    def test_custom_base_temp(self):
+        """Should respect custom base temperature."""
+        temp = _adaptive_temperature({}, base_temp=0.5)
+        assert temp == 0.5
+
+
+class TestCalibrateFromWitnesses:
+    """Verify calibration wiring from witness verdicts."""
+
+    def _make_arg(self, claims_data, confidence=0.8, agent="prosecutor"):
+        claims = [
+            Claim(id=c["id"], statement=c["stmt"], evidence="ev", confidence=c["conf"])
+            for c in claims_data
+        ]
+        return Argument(
+            agent=agent,
+            opening="test opening",
+            claims=claims,
+            confidence=confidence,
+        )
+
+    def _make_witness(self, claim_id, verdict, confidence=0.8):
+        return WitnessReport(
+            claim_id=claim_id,
+            witness_type="fact",
+            resolution="Test resolution",
+            verdict_on_claim=verdict,
+            confidence=confidence,
+        )
+
+    def test_sustained_records_correct(self):
+        """Sustained claim should record as correct prediction."""
+        from utils.confidence_calibration import calibration_tracker as ct
+        # Reset tracker state
+        ct._agents.clear()
+        ct._domain_agents.clear()
+
+        pro = self._make_arg([{"id": "p1", "stmt": "claim", "conf": 0.85}], agent="prosecutor")
+        defense = self._make_arg([{"id": "d1", "stmt": "counter", "conf": 0.7}], agent="defense")
+        witnesses = [self._make_witness("p1", "sustained")]
+
+        _calibrate_from_witnesses(pro, defense, witnesses, "business")
+
+        cal = ct.get_agent_calibration("prosecutor")
+        assert cal is not None
+        assert cal._total_predictions == 1
+
+    def test_overruled_records_incorrect(self):
+        """Overruled claim should record as incorrect prediction."""
+        from utils.confidence_calibration import calibration_tracker as ct
+        ct._agents.clear()
+        ct._domain_agents.clear()
+
+        pro = self._make_arg([{"id": "p1", "stmt": "claim", "conf": 0.9}], agent="prosecutor")
+        defense = self._make_arg([{"id": "d1", "stmt": "counter", "conf": 0.7}], agent="defense")
+        witnesses = [self._make_witness("p1", "overruled")]
+
+        _calibrate_from_witnesses(pro, defense, witnesses, "business")
+
+        cal = ct.get_agent_calibration("prosecutor")
+        assert cal is not None
+
+    def test_inconclusive_skipped(self):
+        """Inconclusive verdicts should not be recorded."""
+        from utils.confidence_calibration import calibration_tracker as ct
+        ct._agents.clear()
+        ct._domain_agents.clear()
+
+        pro = self._make_arg([{"id": "p1", "stmt": "claim", "conf": 0.8}], agent="prosecutor")
+        defense = self._make_arg([], agent="defense")
+        witnesses = [self._make_witness("p1", "inconclusive")]
+
+        _calibrate_from_witnesses(pro, defense, witnesses, "business")
+
+        # No agent should have any recorded predictions
+        cal = ct.get_agent_calibration("prosecutor")
+        assert cal is None
+
+    def test_defense_claims_tracked(self):
+        """Defense claims should be tracked under defense agent."""
+        from utils.confidence_calibration import calibration_tracker as ct
+        ct._agents.clear()
+        ct._domain_agents.clear()
+
+        pro = self._make_arg([], agent="prosecutor")
+        defense = self._make_arg([{"id": "d1", "stmt": "counter", "conf": 0.75}], agent="defense")
+        witnesses = [self._make_witness("d1", "sustained")]
+
+        _calibrate_from_witnesses(pro, defense, witnesses, "legal")
+
+        cal = ct.get_agent_calibration("defense")
+        assert cal is not None
+        assert cal._total_predictions == 1
