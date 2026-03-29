@@ -33,6 +33,13 @@ Build a **multi-agent adversarial AI courtroom** that takes any decision or idea
 - Argument quality scoring: 5-dimension heuristic assessment with A-D grading
 - Confidence calibration: Bayesian ECE tracking per agent per domain
 
+### 6. Intelligence-Driven Routing (ADR-006)
+- Computed intelligence (quality scores, graph analysis, stability) flows through VerdictState — not just emitted as telemetry
+- Cross-examination receives structural analysis: critical paths, foundation claims, coherence differentials inform claim selection
+- Witness prioritization: contested claims reordered by cascading impact from dependency graph — high-impact claims verified first
+- Stability-aware synthesis: fragile verdicts trigger cautious recommendations with contingency plans; narrow margins generate monitoring triggers
+- Domain-aware confidence thresholds: medical (0.7), legal (0.65), technology (0.55) — high-stakes domains require higher witness agreement
+
 ## Delivery Tiers
 
 ### Tier 1 — Core Courtroom (COMPLETE)
@@ -101,7 +108,11 @@ Build a **multi-agent adversarial AI courtroom** that takes any decision or idea
 | Verdict stability perturbation analysis | ✅ | `utils/verdict_stability.py` — 50-run Monte Carlo, evidence margin |
 | Argument quality scoring (A-D grades) | ✅ | `utils/argument_quality.py` — 5-dimension heuristic assessment |
 | Inline analysis in session results | ✅ | `run_pipeline()` computes quality/stability/graph and embeds in result |
-| 409 tests (unit + integration) | ✅ | 22 test files (pytest) |
+| Intelligence-driven routing | ✅ | Computed analysis flows through VerdictState to influence cross-exam, witness priority, and synthesis |
+| Structural cross-examination | ✅ | Judge receives argument graph critical paths + foundation claims for smarter claim selection |
+| Impact-weighted witness prioritization | ✅ | Contested claims reordered by DAG cascading impact before witness spawning |
+| Stability-aware synthesis | ✅ | Fragile verdicts trigger cautious recommendations with contingency plans |
+| 416 tests (unit + integration) | ✅ | 22 test files (pytest) |
 
 ### Pre-Committed Cut Rule
 > "Analytics charts are cut before the courtroom UI is degraded."
@@ -143,7 +154,7 @@ All Tier 2 features were moved to functional status. The courtroom UI was never 
 | test_metrics.py | 17 | Agent tracking, pipeline metrics, percentile computation, error rates |
 | test_security.py | 22 | XSS detection, input sanitization, security headers |
 | test_prompts.py | 22 | Constitutional directive auditing, prompt structure |
-| test_integration.py | 37 | Session lifecycle, domain detection, analytics, claim overlap, research quality, synthesis coverage, analysis pipeline |
+| test_integration.py | 44 | Session lifecycle, domain detection, analytics, claim overlap, research quality, synthesis coverage, analysis pipeline, intelligence pipeline wiring |
 | test_graph_viz.py | 17 | Pipeline topology, witness nodes, routing paths |
 | test_session_manager.py | 23 | FSM state transitions, lifecycle tracking, serialization |
 | test_validators.py | 22 | Question quality, research completeness, format-domain fit |
@@ -153,7 +164,7 @@ All Tier 2 features were moved to functional status. The courtroom UI was never 
 | test_verdict_stability.py | 17 | Evidence margin, perturbation Monte Carlo, flip rate bounds |
 | test_argument_quality.py | 24 | Specificity, diversity, calibration, coherence, grading |
 | test_llm_helpers.py | 23 | JSON parsing, code fence stripping, thinking phases, LLM factory, low-temp retry |
-| **Total** | **409** | |
+| **Total** | **416** | |
 
 ## Technical Decisions
 
