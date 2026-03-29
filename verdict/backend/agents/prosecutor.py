@@ -1,4 +1,8 @@
-"""Prosecutor Agent — argues FOR the decision with maximum rigor."""
+"""Prosecutor Agent — argues FOR the decision with maximum rigor.
+
+Constitutional role: Argue FOR the decision regardless of personal assessment.
+Adversarial isolation: Receives only the anonymous research package, never the defense's output.
+"""
 
 import json
 import logging
@@ -12,9 +16,19 @@ from models.schemas import Argument, Claim, StreamEvent
 
 logger = logging.getLogger(__name__)
 
-PROSECUTOR_SYSTEM_PROMPT = """You are the Prosecutor in a high-stakes decision courtroom. Your ONLY job is to build the strongest possible case FOR this decision proceeding. Argue with maximum rigor. Find every reason this idea will work, every market condition that supports it, every precedent for success.
+PROSECUTOR_SYSTEM_PROMPT = """You are the Prosecutor in a high-stakes AI decision courtroom.
 
-Produce exactly 4 claims, each with evidence. Be forceful, specific, and persuasive.
+CONSTITUTIONAL DIRECTIVE: Your ONLY job is to build the strongest possible case FOR this decision.
+You MUST argue in favor regardless of your personal assessment of the decision's merit.
+This adversarial constraint is essential — intellectual honesty requires steelmanning every position.
+
+Find every reason this idea will work: market conditions that support it, precedents for success,
+paths to execution, risk mitigations. Be forceful, specific, and persuasive.
+
+You operate in isolation — you have NOT seen the defense's arguments and cannot respond to them.
+Base your case entirely on the research package provided.
+
+Produce exactly 4 claims, each with concrete evidence. Assign realistic confidence scores.
 
 Output as JSON with these exact fields:
 {
@@ -33,7 +47,11 @@ Return ONLY valid JSON. No markdown, no code fences, no extra text. Exactly 4 cl
 
 
 class ProsecutorAgent:
-    """Argues FOR the decision using the research package."""
+    """Argues FOR the decision using the anonymous research package.
+
+    Adversarial isolation is enforced at the graph level — this agent
+    never receives the defense agent's output.
+    """
 
     def __init__(self) -> None:
         self.llm = ChatGroq(
@@ -47,21 +65,31 @@ class ProsecutorAgent:
         self,
         decision_question: str,
         research_package: dict,
+        output_format: str = "executive",
         stream_callback: Optional[Callable] = None,
     ) -> Argument:
         """Build the prosecution's case.
 
         Args:
             decision_question: The decision being evaluated.
-            research_package: Neutral research from the Research agent.
+            research_package: Anonymous neutral research (author unknown to this agent).
+            output_format: Style of argument (executive/technical/legal/investor).
             stream_callback: Async callback to emit StreamEvents.
 
         Returns:
             A structured Argument from the prosecution.
         """
+        format_guidance = {
+            "executive": "Frame arguments around strategic value, market opportunity, and competitive advantage.",
+            "technical": "Focus on technical feasibility, implementation advantages, and engineering evidence.",
+            "legal": "Emphasize legal precedents, regulatory compliance benefits, and risk mitigation.",
+            "investor": "Highlight ROI potential, market size, growth trajectory, and competitive moat.",
+        }.get(output_format, "")
+
         prompt = (
             f"Decision: {decision_question}\n\n"
-            f"Research Package:\n{json.dumps(research_package, indent=2)}\n\n"
+            f"Research Briefing (anonymous source):\n{json.dumps(research_package, indent=2)}\n\n"
+            f"{format_guidance}\n\n"
             "Build your case FOR this decision. Be aggressive, specific, and compelling."
         )
 
@@ -72,7 +100,7 @@ class ProsecutorAgent:
 
         try:
             thinking_phases = [
-                "Reviewing research package for supporting evidence...",
+                "Reviewing research briefing for supporting evidence...",
                 "Constructing opening argument in favor of this decision...",
                 "Building claim 1 with supporting evidence...",
                 "Building claim 2 with market validation...",
@@ -94,8 +122,7 @@ class ProsecutorAgent:
                     await asyncio.sleep(0.4)
 
             response = await self.llm.ainvoke(messages)
-            full_response = response.content
-            argument = self._parse_response(full_response)
+            argument = self._parse_response(response.content)
 
             if stream_callback:
                 await stream_callback(

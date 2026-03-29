@@ -52,6 +52,7 @@ class SynthesisAgent:
         defense_argument: Argument,
         witness_reports: list[WitnessReport],
         verdict: VerdictResult,
+        output_format: str = "executive",
         stream_callback: Optional[Callable] = None,
     ) -> Synthesis:
         """Synthesize an improved idea from the full proceeding.
@@ -63,6 +64,7 @@ class SynthesisAgent:
             defense_argument: The defense's argument.
             witness_reports: All witness verification reports.
             verdict: The judge's final ruling.
+            output_format: Style of synthesis output (executive/technical/legal/investor).
             stream_callback: Async callback for stream events.
 
         Returns:
@@ -101,6 +103,7 @@ class SynthesisAgent:
             f"JUDGE VERDICT: {verdict.ruling.upper()}\n"
             f"REASONING: {verdict.reasoning}\n"
             f"KEY FACTORS: {', '.join(verdict.key_factors)}\n\n"
+            f"Output format: {output_format} — tailor your synthesis to this audience.\n\n"
             "Now produce a STRONGER, battle-tested version of the original idea "
             "that addresses every weakness exposed during this proceeding."
         )

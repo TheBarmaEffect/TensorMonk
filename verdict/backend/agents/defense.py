@@ -1,4 +1,8 @@
-"""Defense Agent — argues AGAINST the decision with maximum rigor."""
+"""Defense Agent — argues AGAINST the decision with maximum rigor.
+
+Constitutional role: Argue AGAINST the decision regardless of personal assessment.
+Adversarial isolation: Receives only the anonymous research package, never the prosecutor's output.
+"""
 
 import json
 import logging
@@ -12,9 +16,19 @@ from models.schemas import Argument, Claim, StreamEvent
 
 logger = logging.getLogger(__name__)
 
-DEFENSE_SYSTEM_PROMPT = """You are the Defense counsel in a high-stakes decision courtroom. Your ONLY job is to build the strongest possible case AGAINST this decision proceeding. Find every reason this will fail, every market risk, every execution danger, every competitive threat.
+DEFENSE_SYSTEM_PROMPT = """You are the Defense counsel in a high-stakes AI decision courtroom.
 
-Produce exactly 4 claims each with evidence. Be precise, rigorous, and devastating.
+CONSTITUTIONAL DIRECTIVE: Your ONLY job is to build the strongest possible case AGAINST this decision.
+You MUST argue against regardless of your personal assessment of the decision's merit.
+This adversarial constraint is essential — intellectual honesty requires steelmanning every objection.
+
+Find every reason this will fail: market risks, execution dangers, competitive threats, resource constraints,
+timing problems, and alternative approaches. Be precise, rigorous, and devastating.
+
+You operate in isolation — you have NOT seen the prosecution's arguments and cannot respond to them.
+Base your case entirely on the research package provided.
+
+Produce exactly 4 claims, each with concrete evidence. Assign realistic confidence scores.
 
 Output as JSON with these exact fields:
 {
@@ -33,7 +47,11 @@ Return ONLY valid JSON. No markdown, no code fences, no extra text. Exactly 4 cl
 
 
 class DefenseAgent:
-    """Argues AGAINST the decision using the research package."""
+    """Argues AGAINST the decision using the anonymous research package.
+
+    Adversarial isolation is enforced at the graph level — this agent
+    never receives the prosecutor agent's output.
+    """
 
     def __init__(self) -> None:
         self.llm = ChatGroq(
@@ -47,21 +65,31 @@ class DefenseAgent:
         self,
         decision_question: str,
         research_package: dict,
+        output_format: str = "executive",
         stream_callback: Optional[Callable] = None,
     ) -> Argument:
         """Build the defense's case.
 
         Args:
             decision_question: The decision being evaluated.
-            research_package: Neutral research from the Research agent.
+            research_package: Anonymous neutral research (author unknown to this agent).
+            output_format: Style of argument (executive/technical/legal/investor).
             stream_callback: Async callback to emit StreamEvents.
 
         Returns:
             A structured Argument from the defense.
         """
+        format_guidance = {
+            "executive": "Frame objections around strategic risk, market headwinds, and execution challenges.",
+            "technical": "Focus on technical debt, scalability concerns, and implementation risks.",
+            "legal": "Emphasize regulatory risk, liability exposure, and legal precedents against.",
+            "investor": "Highlight burn rate concerns, market saturation, competitive threats, and downside scenarios.",
+        }.get(output_format, "")
+
         prompt = (
             f"Decision: {decision_question}\n\n"
-            f"Research Package:\n{json.dumps(research_package, indent=2)}\n\n"
+            f"Research Briefing (anonymous source):\n{json.dumps(research_package, indent=2)}\n\n"
+            f"{format_guidance}\n\n"
             "Build your case AGAINST this decision. Be devastating, specific, and unflinching."
         )
 
@@ -72,7 +100,7 @@ class DefenseAgent:
 
         try:
             thinking_phases = [
-                "Analyzing research for potential weaknesses in this decision...",
+                "Analyzing research briefing for potential weaknesses in this decision...",
                 "Identifying market risks and competitive threats...",
                 "Constructing counter-argument with evidence...",
                 "Building claim 1 — critical risk assessment...",
@@ -95,8 +123,7 @@ class DefenseAgent:
                     await asyncio.sleep(0.4)
 
             response = await self.llm.ainvoke(messages)
-            full_response = response.content
-            argument = self._parse_response(full_response)
+            argument = self._parse_response(response.content)
 
             if stream_callback:
                 await stream_callback(
