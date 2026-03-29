@@ -21,8 +21,18 @@ All notable changes to the Verdict project.
 - **Argument Quality Scoring** (`utils/argument_quality.py`): 5-dimension heuristic assessment (evidence specificity, claim diversity, confidence calibration, opening coherence, actionability) with A-D letter grading
 - **Analysis API Endpoint**: `GET /api/verdict/{id}/analysis` — returns quality grades, dependency graphs, and stability analysis for completed sessions
 
+### Refactored — Code Quality (DRY)
+- **Shared LLM Helpers** (`utils/llm_helpers.py`): Extracted 4 duplicated patterns from all 6 agents into shared utilities — `parse_llm_json()`, `emit_thinking_phases()`, `create_llm()`, `retry_with_low_temperature()`
+- **Agent Cleanup**: All 6 agents refactored to use shared helpers; removed unused `ChatGroq` and `settings` imports
+- **Centralized Format Instructions**: Prosecutor, Defense, and Research agents now use `prompts.get_format_instruction()` instead of inline format dicts
+- **Route DRY Cleanup**: `detect_domain` and `followup` endpoints refactored to use `create_llm()` and `parse_llm_json()`
+- **Validators Wired to Production**: `validate_question_quality()`, `check_format_domain_fit()`, and `validate_research_package()` now used in API routes and graph nodes
+- **Inline Analysis**: Session results now include embedded argument quality, stability, and dependency graph analysis (no separate endpoint needed)
+
 ### Testing
-- 362 total tests across 21 test files (up from 172)
+- 389 total tests across 22 test files (up from 172)
+- Added LLM helpers tests: JSON parsing, code fence stripping, thinking phases, factory, retry (23 tests)
+- Added API quality gate tests: generic rejection, format suggestion field (4 tests)
 - Added graph pipeline tests: adaptive temperature, calibration wiring, constitutional compliance (31 tests)
 - Added agent-level integration tests: claim overlap, research quality, synthesis coverage (31 tests)
 - Added argument graph tests: DAG construction, degree metrics, cascading impact (23 tests)
