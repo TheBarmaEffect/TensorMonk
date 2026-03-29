@@ -114,7 +114,7 @@ User Input (question + context + output_format)
 - Session history: persistent JSON-backed session store via `GET /api/verdict/sessions/history`, displayed in frontend `SessionHistory` component
 - Verdict sharing: `GET /api/verdict/{id}/share` generates short URL token, `GET /shared/{token}` retrieves results
 - Web search grounding: Research Agent queries Tavily (or DuckDuckGo fallback) for current facts before LLM analysis
-- 89 unit tests across 8 test files: schemas, graph topology, API contracts, exports, resilience, cache, middleware, domain config (pytest)
+- 106 unit tests across 10 test files: schemas, graph topology, API contracts, exports, resilience, cache, middleware, domain config, error types, pipeline metrics (pytest)
 - Input validation on all API request models (question length, context length, format enum)
 - Rate limiting middleware: token bucket per IP with configurable RPM/burst
 - Request timing middleware: X-Request-ID + X-Response-Time headers on all responses
@@ -124,6 +124,9 @@ User Input (question + context + output_format)
 - Deep health check: Groq API, Redis, session store, uptime reporting
 - Graceful startup/shutdown lifecycle handlers with structured logging
 - Session-aware structured logging via contextvars for async correlation IDs
+- Structured error hierarchy: VerdictError → AgentError/SessionError/ExportError with JSON serialization
+- Pipeline performance metrics: per-agent durations, success/failure counts, exposed via `/metrics` endpoint
+- py.typed PEP 561 marker for static type checking support
 
 **Frontend (fully functional)**
 - Sequential ACT-based courtroom UI (5 Acts: Investigation, Debate, Cross-Examination, Ruling, Synthesis)
@@ -224,7 +227,8 @@ docker-compose up --build
 | `POST` | `/api/verdict/{id}/followup` | Context-aware follow-up Q&A |
 | `GET` | `/api/verdict/{id}/share` | Generate shareable verdict URL token |
 | `GET` | `/api/verdict/shared/{token}` | Retrieve verdict by share token |
-| `GET` | `/health` | Health check |
+| `GET` | `/health` | Deep health check with dependency readiness |
+| `GET` | `/metrics` | Pipeline performance metrics |
 
 ### POST /api/verdict/start
 
