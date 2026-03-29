@@ -4,6 +4,7 @@ import pytest
 from utils.verdict_stability import (
     compute_evidence_margin,
     perturbation_stability,
+    sensitivity_analysis,
     full_stability_analysis,
 )
 
@@ -132,3 +133,72 @@ class TestFullStabilityAnalysis:
     def test_combined_robustness_bounded(self):
         result = full_stability_analysis(0.8, 0.3, "proceed", [], 0.8, 0.3)
         assert 0.0 <= result["combined_robustness"] <= 1.0
+
+    def test_includes_sensitivity(self):
+        result = full_stability_analysis(0.7, 0.5, "proceed", [], 0.7, 0.5)
+        assert "sensitivity" in result
+        assert "pivotal_witnesses" in result["sensitivity"]
+
+
+class TestSensitivityAnalysis:
+    """Test leave-one-out witness sensitivity analysis."""
+
+    def test_no_witnesses_returns_zero_fragility(self):
+        result = sensitivity_analysis([], 0.8, 0.4)
+        assert result["fragility_score"] == 0.0
+        assert result["pivotal_witnesses"] == []
+
+    def test_single_witness_non_pivotal(self):
+        """A single sustained witness on prosecution with large margin is not pivotal."""
+        witnesses = [
+            {"claim_id": "pro_1", "confidence": 0.5, "verdict_on_claim": "sustained", "from_agent": "prosecutor"},
+        ]
+        # Pro starts at 0.9, def at 0.3 — huge margin. Removing one witness won't flip.
+        result = sensitivity_analysis(witnesses, 0.9, 0.3)
+        assert result["fragility_score"] == 0.0
+        assert len(result["pivotal_witnesses"]) == 0
+        assert result["full_verdict_direction"] == "prosecution"
+
+    def test_pivotal_witness_detected(self):
+        """When a witness barely tips the verdict, removing it should flip."""
+        witnesses = [
+            {"claim_id": "pro_1", "confidence": 0.9, "verdict_on_claim": "sustained", "from_agent": "prosecutor"},
+        ]
+        # Scores are very close: pro=0.49, def=0.50. Sustained +0.09 → pro=0.58 wins.
+        # Without the witness, def wins at 0.50 > 0.49.
+        result = sensitivity_analysis(witnesses, 0.49, 0.50)
+        assert len(result["pivotal_witnesses"]) == 1
+        assert result["pivotal_witnesses"][0] == "pro_1"
+        assert result["fragility_score"] == 1.0
+
+    def test_per_witness_impact_has_correct_fields(self):
+        witnesses = [
+            {"claim_id": "d_1", "confidence": 0.7, "verdict_on_claim": "sustained", "from_agent": "defense"},
+        ]
+        result = sensitivity_analysis(witnesses, 0.6, 0.5)
+        assert len(result["per_witness_impact"]) == 1
+        impact = result["per_witness_impact"][0]
+        assert "claim_id" in impact
+        assert "flips_verdict" in impact
+        assert "margin_shift" in impact
+
+    def test_fragility_bounded(self):
+        witnesses = [
+            {"claim_id": "pro_1", "confidence": 0.5, "verdict_on_claim": "sustained", "from_agent": "prosecutor"},
+            {"claim_id": "d_1", "confidence": 0.5, "verdict_on_claim": "overruled", "from_agent": "defense"},
+        ]
+        result = sensitivity_analysis(witnesses, 0.6, 0.5)
+        assert 0.0 <= result["fragility_score"] <= 1.0
+
+    def test_multiple_witnesses_fragility(self):
+        """With three witnesses, fragility = pivotal_count / 3."""
+        witnesses = [
+            {"claim_id": "pro_1", "confidence": 0.8, "verdict_on_claim": "sustained", "from_agent": "prosecutor"},
+            {"claim_id": "pro_2", "confidence": 0.7, "verdict_on_claim": "sustained", "from_agent": "prosecutor"},
+            {"claim_id": "d_1", "confidence": 0.6, "verdict_on_claim": "sustained", "from_agent": "defense"},
+        ]
+        result = sensitivity_analysis(witnesses, 0.7, 0.5)
+        assert len(result["per_witness_impact"]) == 3
+        # Fragility should be N_pivotal / 3
+        expected_fragility = len(result["pivotal_witnesses"]) / 3
+        assert abs(result["fragility_score"] - expected_fragility) < 0.001
