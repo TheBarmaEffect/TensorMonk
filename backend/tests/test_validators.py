@@ -6,6 +6,7 @@ from utils.validators import (
     validate_research_package,
     check_format_domain_fit,
     is_valid_domain,
+    closest_valid_domain,
     VALID_DOMAINS,
 )
 
@@ -144,3 +145,21 @@ class TestDomainValidation:
 
     def test_valid_domain_count(self):
         assert len(VALID_DOMAINS) == 10
+
+
+class TestClosestDomain:
+    """Test Levenshtein-based typo correction for domain names."""
+
+    def test_exact_match_returns_domain(self):
+        assert closest_valid_domain("business") == "business"
+
+    def test_typo_correction(self):
+        assert closest_valid_domain("busines") == "business"
+        assert closest_valid_domain("technolgy") == "technology"
+        assert closest_valid_domain("medicl") == "medical"
+
+    def test_too_far_returns_none(self):
+        assert closest_valid_domain("zzzzzzz") is None
+
+    def test_case_insensitive(self):
+        assert closest_valid_domain("LEGAL") == "legal"
