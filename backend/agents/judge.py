@@ -1,4 +1,21 @@
-"""Judge Agent — cross-examines arguments and delivers final verdict."""
+"""Judge Agent — cross-examines arguments and delivers final verdict.
+
+Constitutional role: Impartial arbiter. The Judge is the first node in
+the graph to receive both Prosecutor and Defense arguments — enforcing
+adversarial isolation up to this point.
+
+The Judge performs two distinct phases:
+1. Cross-examination: Identifies contested claims for witness verification.
+   Uses argument strength differential analysis to prioritize claims
+   where the conflict is sharpest (high confidence on both sides).
+2. Verdict: Weighs all evidence including witness reports to deliver
+   a final ruling (proceed/reject/conditional) with confidence scoring.
+
+Verdict confidence is computed using witness-weighted evidence scoring:
+- Sustained witness claims boost the originating side's weight
+- Overruled claims reduce that side's weight
+- Inconclusive claims are neutral (no weight change)
+"""
 
 import asyncio
 import json
@@ -194,11 +211,21 @@ class JudgeAgent:
             for w in witness_reports
         ]
 
+        # Compute witness-weighted evidence scores for quantitative grounding
+        evidence_scores = self.compute_evidence_score(
+            prosecutor_argument, defense_argument, witness_reports,
+        )
+
         prompt = (
             f"Decision: {decision_question}\n\n"
             f"PROSECUTION (confidence {prosecutor_argument.confidence}):\n{prosecutor_argument.opening}\n\n"
             f"DEFENSE (confidence {defense_argument.confidence}):\n{defense_argument.opening}\n\n"
             f"WITNESS VERIFICATION REPORTS:\n{json.dumps(witness_data, indent=2)}\n\n"
+            f"EVIDENCE SCORING (witness-weighted):\n"
+            f"  Prosecution score: {evidence_scores['prosecution_score']}\n"
+            f"  Defense score: {evidence_scores['defense_score']}\n"
+            f"  Score differential: {evidence_scores['score_differential']}\n\n"
+            "Consider these evidence scores alongside your qualitative analysis. "
             "Deliver your final verdict."
         )
 
@@ -263,6 +290,82 @@ class JudgeAgent:
                     StreamEvent(event_type="error", agent="judge", content=f"Verdict error: {str(e)}")
                 )
             raise
+
+    def compute_evidence_score(
+        self,
+        prosecutor_argument: Argument,
+        defense_argument: Argument,
+        witness_reports: list[WitnessReport],
+    ) -> dict:
+        """Compute witness-weighted evidence scores for both sides.
+
+        Each side starts with their stated confidence. Witness verdicts
+        then adjust the scores:
+        - Sustained claims for a side: +0.1 * witness_confidence
+        - Overruled claims for a side: -0.15 * witness_confidence
+        - Inconclusive: no adjustment
+
+        This provides a quantitative foundation for the Judge's LLM
+        reasoning — the LLM sees these scores in the prompt.
+
+        Args:
+            prosecutor_argument: The prosecution's case.
+            defense_argument: The defense's case.
+            witness_reports: All witness verification reports.
+
+        Returns:
+            Dict with pro_score, def_score, and per-claim adjustments.
+        """
+        pro_score = prosecutor_argument.confidence
+        def_score = defense_argument.confidence
+
+        # Build claim ownership map
+        pro_claim_ids = {c.id for c in prosecutor_argument.claims}
+        def_claim_ids = {c.id for c in defense_argument.claims}
+
+        adjustments = []
+        for w in witness_reports:
+            is_pro_claim = w.claim_id in pro_claim_ids
+            is_def_claim = w.claim_id in def_claim_ids
+            adj_target = "prosecutor" if is_pro_claim else "defense" if is_def_claim else "unknown"
+
+            if w.verdict_on_claim == "sustained":
+                boost = 0.1 * w.confidence
+                if is_pro_claim:
+                    pro_score = min(1.0, pro_score + boost)
+                elif is_def_claim:
+                    def_score = min(1.0, def_score + boost)
+                adjustments.append({
+                    "claim_id": w.claim_id, "verdict": "sustained",
+                    "side": adj_target, "adjustment": f"+{boost:.3f}",
+                })
+            elif w.verdict_on_claim == "overruled":
+                penalty = 0.15 * w.confidence
+                if is_pro_claim:
+                    pro_score = max(0.0, pro_score - penalty)
+                elif is_def_claim:
+                    def_score = max(0.0, def_score - penalty)
+                adjustments.append({
+                    "claim_id": w.claim_id, "verdict": "overruled",
+                    "side": adj_target, "adjustment": f"-{penalty:.3f}",
+                })
+            else:
+                adjustments.append({
+                    "claim_id": w.claim_id, "verdict": "inconclusive",
+                    "side": adj_target, "adjustment": "0",
+                })
+
+        logger.info(
+            "Evidence scores — Prosecution: %.3f, Defense: %.3f (%d adjustments)",
+            pro_score, def_score, len(adjustments),
+        )
+
+        return {
+            "prosecution_score": round(pro_score, 3),
+            "defense_score": round(def_score, 3),
+            "score_differential": round(pro_score - def_score, 3),
+            "adjustments": adjustments,
+        }
 
     def _parse_json(self, response: str) -> dict:
         """Parse JSON from LLM response, handling markdown fences."""
