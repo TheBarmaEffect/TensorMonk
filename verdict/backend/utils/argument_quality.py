@@ -190,6 +190,60 @@ def score_opening_coherence(opening: str, claims: list[dict]) -> float:
     return round(claims_connected / len(claims), 3)
 
 
+def score_logical_structure(claims: list[dict]) -> float:
+    """Score whether claims build on each other in a logical chain.
+
+    A well-structured argument has claims that reference or build upon
+    earlier claims, creating a logical progression. We detect this by
+    looking for forward references (keywords from earlier claims appearing
+    in later claims) and causal connectors.
+
+    Args:
+        claims: List of claim dicts with 'statement' field.
+
+    Returns:
+        Score between 0.0 and 1.0. Higher = stronger logical chain.
+    """
+    if len(claims) <= 1:
+        return 0.5  # Single claim has neutral structure
+
+    # Extract keyword sets per claim
+    claim_words = []
+    for claim in claims:
+        words = {w.lower() for w in claim.get("statement", "").split() if len(w) > 3}
+        claim_words.append(words)
+
+    # Check for forward references: later claims referencing earlier claim keywords
+    forward_refs = 0
+    total_pairs = 0
+    for i in range(1, len(claim_words)):
+        for j in range(i):
+            if claim_words[i] and claim_words[j]:
+                overlap = len(claim_words[i] & claim_words[j])
+                if overlap >= 1:
+                    forward_refs += 1
+                total_pairs += 1
+
+    reference_score = forward_refs / total_pairs if total_pairs > 0 else 0.0
+
+    # Check for causal connectors within claims
+    causal_patterns = [
+        r"therefore|consequently|thus|hence",
+        r"because|since|given that|as a result",
+        r"building on|furthermore|additionally|moreover",
+        r"this means|this implies|this suggests",
+    ]
+    causal_count = 0
+    for claim in claims:
+        stmt = claim.get("statement", "")
+        if any(re.search(p, stmt, re.IGNORECASE) for p in causal_patterns):
+            causal_count += 1
+
+    causal_score = min(1.0, causal_count / max(1, len(claims) - 1))
+
+    return round(0.6 * reference_score + 0.4 * causal_score, 3)
+
+
 def score_actionability(claims: list[dict]) -> float:
     """Score whether claims are testable and lead to verifiable conclusions.
 
@@ -244,18 +298,20 @@ def score_argument_quality(argument_data: dict) -> dict[str, Any]:
     dimensions = {
         "evidence_specificity": score_evidence_specificity(claims),
         "claim_diversity": score_claim_diversity(claims),
+        "logical_structure": score_logical_structure(claims),
         "confidence_calibration": score_confidence_calibration(claims, confidence),
         "opening_coherence": score_opening_coherence(opening, claims),
         "actionability": score_actionability(claims),
     }
 
-    # Weighted overall score
+    # Weighted overall score (6 dimensions)
     weights = {
-        "evidence_specificity": 0.25,
-        "claim_diversity": 0.20,
-        "confidence_calibration": 0.20,
-        "opening_coherence": 0.15,
-        "actionability": 0.20,
+        "evidence_specificity": 0.22,
+        "claim_diversity": 0.17,
+        "logical_structure": 0.15,
+        "confidence_calibration": 0.17,
+        "opening_coherence": 0.12,
+        "actionability": 0.17,
     }
 
     overall = sum(dimensions[dim] * weights[dim] for dim in weights)
