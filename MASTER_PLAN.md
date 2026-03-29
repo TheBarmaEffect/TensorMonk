@@ -118,7 +118,7 @@ Build a **multi-agent adversarial AI courtroom** that takes any decision or idea
 | Structural cross-examination | ✅ | Judge receives argument graph critical paths + foundation claims for smarter claim selection |
 | Impact-weighted witness prioritization | ✅ | Contested claims reordered by DAG cascading impact before witness spawning |
 | Stability-aware synthesis | ✅ | Fragile verdicts trigger cautious recommendations with contingency plans |
-| 479 tests (unit + integration) | ✅ | 22 test files (pytest) |
+| 494 tests (unit + integration) | ✅ | 22 test files (pytest) |
 
 ### Pre-Committed Cut Rule
 > "Analytics charts are cut before the courtroom UI is degraded."
@@ -170,7 +170,7 @@ All Tier 2 features were moved to functional status. The courtroom UI was never 
 | test_verdict_stability.py | 24 | Evidence margin, perturbation Monte Carlo, flip rate bounds, sensitivity analysis |
 | test_argument_quality.py | 24 | Specificity, diversity, calibration, coherence, grading |
 | test_llm_helpers.py | 23 | JSON parsing, code fence stripping, thinking phases, LLM factory, low-temp retry |
-| **Total** | **458** | |
+| **Total** | **494** | |
 
 ## Technical Decisions
 
