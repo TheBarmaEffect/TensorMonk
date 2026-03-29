@@ -23,6 +23,7 @@ from typing import Callable, Optional
 
 from langchain_core.messages import SystemMessage, HumanMessage
 
+from agents.prompts import SYNTHESIS_SYSTEM
 from config.domain_config import get_synthesis_anchors, get_suggested_format
 from utils.resilience import retry_with_backoff
 from utils.llm_helpers import parse_llm_json, emit_thinking_phases, create_llm, retry_with_low_temperature
@@ -36,21 +37,6 @@ from models.schemas import (
 )
 
 logger = logging.getLogger(__name__)
-
-SYNTHESIS_SYSTEM_PROMPT = """You are the Synthesis architect. You have witnessed a full adversarial proceeding about a decision. Your job is not to pick a side — it is to produce a BETTER version of the original idea that incorporates the strongest points from both sides and directly addresses every weakness the Defense exposed.
-
-Output as JSON:
-{
-  "improved_idea": "string — full description of the enhanced, battle-tested version of the original idea (3-5 paragraphs)",
-  "addressed_objections": ["string — each Defense objection and specifically how the improved idea addresses it"],
-  "recommended_actions": ["string — concrete, actionable next steps to implement the improved idea"],
-  "strength_score": 0.0-1.0
-}
-
-The strength_score rates the improved idea vs the original: 0.5 means equal, >0.5 means the improved version is stronger, 1.0 means vastly superior.
-
-Return ONLY valid JSON. No markdown, no code fences."""
-
 
 class SynthesisAgent:
     """Reads the entire proceeding and produces an evolved version of the idea."""
@@ -153,7 +139,7 @@ class SynthesisAgent:
         )
 
         messages = [
-            SystemMessage(content=SYNTHESIS_SYSTEM_PROMPT),
+            SystemMessage(content=SYNTHESIS_SYSTEM.format(domain_overlay="")),
             HumanMessage(content=prompt),
         ]
 

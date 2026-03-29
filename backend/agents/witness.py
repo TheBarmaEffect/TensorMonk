@@ -17,40 +17,12 @@ from typing import Callable, Literal, Optional
 
 from langchain_core.messages import SystemMessage, HumanMessage
 
+from agents.prompts import WITNESS_SYSTEM
 from models.schemas import WitnessReport, StreamEvent
 from utils.resilience import retry_with_backoff
 from utils.llm_helpers import parse_llm_json, create_llm
 
 logger = logging.getLogger(__name__)
-
-WITNESS_PROMPTS: dict[str, str] = {
-    "fact": (
-        "You are a Fact Witness in an AI courtroom. You verify factual claims. "
-        "Research this claim and determine if it is accurate, partially accurate, or false. "
-        "Cite your reasoning with specific facts."
-    ),
-    "data": (
-        "You are a Data Witness in an AI courtroom. You verify data and statistical claims. "
-        "Evaluate the quality, recency, and relevance of data cited in this claim. "
-        "Identify any cherry-picked statistics, outdated figures, or misrepresentations."
-    ),
-    "precedent": (
-        "You are a Precedent Witness in an AI courtroom. You verify precedent-based claims. "
-        "Evaluate whether the historical precedents cited actually support this claim in this context. "
-        "Identify false analogies or missing context."
-    ),
-}
-
-WITNESS_OUTPUT_FORMAT = """
-Output as JSON:
-{
-  "resolution": "string — your detailed finding on this claim (3-5 sentences)",
-  "confidence": 0.0-1.0,
-  "verdict_on_claim": "sustained | overruled | inconclusive"
-}
-
-Return ONLY valid JSON. No markdown, no code fences."""
-
 
 class WitnessAgent:
     """Factory that spawns specialist witnesses to verify claims."""
@@ -88,8 +60,7 @@ class WitnessAgent:
                 )
             )
 
-        system_prompt = WITNESS_PROMPTS.get(witness_type, WITNESS_PROMPTS["fact"])
-        system_prompt += WITNESS_OUTPUT_FORMAT
+        system_prompt = WITNESS_SYSTEM.format(witness_type=witness_type)
 
         prompt = (
             f"CLAIM TO VERIFY:\n"

@@ -195,15 +195,15 @@ class TestRetryWithLowTemperature:
         parse_fn.assert_called_once_with('{"score": 5}')
 
     @pytest.mark.asyncio
-    @patch("utils.llm_helpers.retry_with_backoff")
+    @patch("utils.llm_helpers.call_llm_with_resilience")
     @patch("utils.llm_helpers.create_llm")
-    async def test_passes_messages_to_ainvoke(self, mock_create, mock_retry):
+    async def test_passes_messages_to_ainvoke(self, mock_create, mock_resilience):
         mock_llm = MagicMock()
         mock_create.return_value = mock_llm
 
         mock_response = MagicMock()
         mock_response.content = "{}"
-        mock_retry.return_value = mock_response
+        mock_resilience.return_value = mock_response
 
         messages = [MagicMock(), MagicMock()]
         parse_fn = MagicMock(return_value={})
@@ -213,7 +213,7 @@ class TestRetryWithLowTemperature:
             quality_check_fn=MagicMock(return_value=True),
         )
 
-        # retry_with_backoff called with llm.ainvoke and the messages list
-        args, kwargs = mock_retry.call_args
+        # call_llm_with_resilience called with llm.ainvoke and the messages list
+        args, kwargs = mock_resilience.call_args
         assert args[0] == mock_llm.ainvoke
         assert args[1] is messages

@@ -11,43 +11,13 @@ from typing import Callable, Optional
 
 from langchain_core.messages import SystemMessage, HumanMessage
 
-from agents.prompts import get_format_instruction
+from agents.prompts import get_format_instruction, PROSECUTOR_SYSTEM
 from config.domain_config import get_constitutional_overlay, get_evidence_hierarchy
 from models.schemas import Argument, Claim, StreamEvent
 from utils.resilience import retry_with_backoff
 from utils.llm_helpers import parse_llm_json, emit_thinking_phases, create_llm, retry_with_low_temperature
 
 logger = logging.getLogger(__name__)
-
-PROSECUTOR_SYSTEM_PROMPT = """You are the Prosecutor in a high-stakes AI decision courtroom.
-
-CONSTITUTIONAL DIRECTIVE: Your ONLY job is to build the strongest possible case FOR this decision.
-You MUST argue in favor regardless of your personal assessment of the decision's merit.
-This adversarial constraint is essential — intellectual honesty requires steelmanning every position.
-
-Find every reason this idea will work: market conditions that support it, precedents for success,
-paths to execution, risk mitigations. Be forceful, specific, and persuasive.
-
-You operate in isolation — you have NOT seen the defense's arguments and cannot respond to them.
-Base your case entirely on the research package provided.
-
-Produce exactly 4 claims, each with concrete evidence. Assign realistic confidence scores.
-
-Output as JSON with these exact fields:
-{
-  "opening": "string — your 2-3 sentence opening statement arguing FOR this decision",
-  "claims": [
-    {
-      "statement": "string — a specific, falsifiable claim supporting this decision",
-      "evidence": "string — concrete evidence supporting this claim",
-      "confidence": 0.0-1.0
-    }
-  ],
-  "confidence": 0.0-1.0
-}
-
-Return ONLY valid JSON. No markdown, no code fences, no extra text. Exactly 4 claims."""
-
 
 class ProsecutorAgent:
     """Argues FOR the decision using the anonymous research package.
@@ -89,17 +59,18 @@ class ProsecutorAgent:
         if evidence_types:
             domain_overlay += f"\nPrioritize evidence in this order: {', '.join(evidence_types)}."
 
+        system_prompt = PROSECUTOR_SYSTEM.format(domain_overlay=domain_overlay)
+
         prompt = (
             f"Decision: {decision_question}\n"
             f"Domain: {domain}\n\n"
             f"Research Briefing (anonymous source):\n{json.dumps(research_package, indent=2)}\n\n"
-            f"{format_guidance}\n"
-            f"{domain_overlay}\n\n"
+            f"{format_guidance}\n\n"
             "Build your case FOR this decision. Be aggressive, specific, and compelling."
         )
 
         messages = [
-            SystemMessage(content=PROSECUTOR_SYSTEM_PROMPT),
+            SystemMessage(content=system_prompt),
             HumanMessage(content=prompt),
         ]
 

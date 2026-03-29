@@ -947,7 +947,8 @@ async def run_verdict_graph(
     Returns:
         The final VerdictState with all results.
     """
-    compiled = build_verdict_graph()
+    interrupt_before = bool(os.getenv("INTERRUPT_BEFORE_VERDICT"))
+    compiled = build_verdict_graph(interrupt_before_verdict=interrupt_before)
 
     tid = thread_id or decision.get("id", "default")
 

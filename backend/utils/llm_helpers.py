@@ -17,9 +17,15 @@ from langchain_core.messages import BaseMessage
 
 from config import settings
 from models.schemas import StreamEvent
-from utils.resilience import retry_with_backoff
+from utils.resilience import retry_with_backoff, CircuitBreaker, CircuitOpenError
 
 logger = logging.getLogger(__name__)
+
+# Module-level circuit breaker for LLM calls — opens after 5 consecutive
+# failures and rejects calls for 30 seconds to avoid cascading failures.
+_llm_circuit_breaker = CircuitBreaker(
+    failure_threshold=5, recovery_timeout=30.0, name="llm"
+)
 
 
 def parse_llm_json(
@@ -144,9 +150,50 @@ async def retry_with_low_temperature(
     """
     logger.warning("%s output failed quality check, retrying with temperature=0.3", operation_name)
     retry_llm = create_llm(temperature=0.3, max_tokens=max_tokens)
-    retry_response = await retry_with_backoff(
+    retry_response = await call_llm_with_resilience(
         retry_llm.ainvoke, messages,
         max_retries=1, base_delay=0.5,
         operation_name=f"{operation_name} (low-temp retry)",
     )
     return parse_fn(retry_response.content)
+
+
+async def call_llm_with_resilience(
+    fn: Callable[..., Any],
+    *args: Any,
+    max_retries: int = 3,
+    base_delay: float = 1.0,
+    operation_name: str = "LLM",
+    **kwargs: Any,
+) -> Any:
+    """Execute an LLM call with circuit breaker + retry-with-backoff.
+
+    Combines two resilience layers:
+    1. Circuit breaker — fails fast when the LLM provider is unhealthy.
+    2. Retry with exponential backoff — handles transient failures.
+
+    Args:
+        fn: Async callable (e.g. ``llm.ainvoke``).
+        *args: Positional args forwarded to *fn*.
+        max_retries: Max retry attempts for backoff.
+        base_delay: Initial backoff delay in seconds.
+        operation_name: Human-readable label for logging.
+        **kwargs: Keyword args forwarded to *fn*.
+
+    Returns:
+        The result of the successful function call.
+
+    Raises:
+        CircuitOpenError: If the circuit breaker is open.
+    """
+    async def _guarded(*a: Any, **kw: Any) -> Any:
+        return await _llm_circuit_breaker.call(fn, *a, **kw)
+
+    return await retry_with_backoff(
+        _guarded, *args,
+        max_retries=max_retries,
+        base_delay=base_delay,
+        operation_name=operation_name,
+        retryable_exceptions=(Exception,),
+        **kwargs,
+    )
