@@ -567,3 +567,46 @@ class TestIntelligencePipelineIntegration:
         assert "technology" in DOMAIN_CONFIDENCE_THRESHOLDS
         # Medical should require higher confidence than technology
         assert DOMAIN_CONFIDENCE_THRESHOLDS["medical"] > DOMAIN_CONFIDENCE_THRESHOLDS["technology"]
+
+
+class TestEndToEndGraphTopology:
+    """Verify the LangGraph state machine is correctly wired end-to-end."""
+
+    def test_graph_compiles_without_error(self):
+        """The full verdict graph should compile into a runnable."""
+        from graph.verdict_graph import build_verdict_graph
+        graph = build_verdict_graph()
+        assert graph is not None
+
+    def test_graph_is_invocable(self):
+        """Compiled graph should have an invoke or ainvoke method."""
+        from graph.verdict_graph import build_verdict_graph
+        graph = build_verdict_graph()
+        assert hasattr(graph, 'ainvoke') or hasattr(graph, 'invoke')
+
+    def test_strip_authorship_removes_all_fields(self):
+        """strip_authorship should remove all 11 metadata fields."""
+        from graph.verdict_graph import strip_authorship
+        data = {
+            "content": "Real data",
+            "agent_id": "secret", "agent": "secret", "source": "secret",
+            "model": "secret", "timestamp": "secret", "metadata": "secret",
+            "author": "secret", "provider": "secret", "version": "secret",
+            "run_id": "secret", "trace_id": "secret",
+        }
+        cleaned = strip_authorship(data)
+        assert cleaned["content"] == "Real data"
+        for field in ["agent_id", "agent", "source", "model", "timestamp",
+                       "metadata", "author", "provider", "version", "run_id", "trace_id"]:
+            assert field not in cleaned
+
+    def test_domain_thresholds_cover_all_yaml_domains(self):
+        """Every domain in domains.yaml should have a confidence threshold or use default."""
+        import yaml
+        from graph.verdict_graph import DOMAIN_CONFIDENCE_THRESHOLDS
+        with open("config/domains.yaml") as f:
+            domains = yaml.safe_load(f)
+        for domain_name in domains:
+            # Either has explicit threshold or falls to default 0.6
+            threshold = DOMAIN_CONFIDENCE_THRESHOLDS.get(domain_name, 0.6)
+            assert 0.0 < threshold <= 1.0
