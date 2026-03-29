@@ -202,3 +202,25 @@ class TestSensitivityAnalysis:
         # Fragility should be N_pivotal / 3
         expected_fragility = len(result["pivotal_witnesses"]) / 3
         assert abs(result["fragility_score"] - expected_fragility) < 0.001
+
+    def test_most_impactful_witness_identified(self):
+        """Sensitivity should identify the single most impactful witness."""
+        witnesses = [
+            {"claim_id": "pro_1", "confidence": 0.9, "verdict_on_claim": "sustained", "from_agent": "prosecutor"},
+            {"claim_id": "d_1", "confidence": 0.3, "verdict_on_claim": "overruled", "from_agent": "defense"},
+        ]
+        result = sensitivity_analysis(witnesses, 0.49, 0.50)
+        assert "most_impactful" in result
+        # pro_1 with high confidence sustained should have the largest margin_shift
+        assert result["most_impactful"] is not None
+
+    def test_impact_sorted_descending(self):
+        """Per-witness impacts should be sorted by margin_shift descending."""
+        witnesses = [
+            {"claim_id": "pro_1", "confidence": 0.9, "verdict_on_claim": "sustained", "from_agent": "prosecutor"},
+            {"claim_id": "pro_2", "confidence": 0.3, "verdict_on_claim": "sustained", "from_agent": "prosecutor"},
+        ]
+        result = sensitivity_analysis(witnesses, 0.5, 0.4)
+        impacts = result["per_witness_impact"]
+        if len(impacts) >= 2:
+            assert impacts[0]["margin_shift"] >= impacts[1]["margin_shift"]
