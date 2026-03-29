@@ -181,3 +181,21 @@ class TestShareEndpoint:
     def test_shared_nonexistent_returns_404(self):
         resp = client.get("/api/verdict/shared/nonexistent")
         assert resp.status_code == 404
+
+
+class TestDomainsEndpoint:
+    def test_domains_returns_all_9(self):
+        resp = client.get("/api/verdict/domains")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["count"] == 9
+        names = [d["name"] for d in data["domains"]]
+        assert "medical" in names
+        assert "technology" in names
+
+    def test_domains_have_suggested_format(self):
+        resp = client.get("/api/verdict/domains")
+        data = resp.json()
+        for domain in data["domains"]:
+            assert "suggested_format" in domain
+            assert domain["suggested_format"] in ("executive", "technical", "legal", "investor")
