@@ -10,6 +10,7 @@ from agents.prompts import (
     WITNESS_SYSTEM,
     SYNTHESIS_SYSTEM,
     FORMAT_INSTRUCTIONS,
+    PROMPT_VERSION,
     get_format_instruction,
 )
 
@@ -105,3 +106,16 @@ class TestFormatInstructions:
 
     def test_all_four_formats_defined(self):
         assert set(FORMAT_INSTRUCTIONS.keys()) == {"executive", "technical", "legal", "investor"}
+
+
+class TestPromptVersion:
+    """Verify prompt version tracking for audit trail."""
+
+    def test_version_is_semver(self):
+        parts = PROMPT_VERSION.split(".")
+        assert len(parts) == 3
+        assert all(p.isdigit() for p in parts)
+
+    def test_version_matches_app(self):
+        from config import settings
+        assert PROMPT_VERSION == settings.APP_VERSION
