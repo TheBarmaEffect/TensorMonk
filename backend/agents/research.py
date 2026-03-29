@@ -215,17 +215,21 @@ class ResearchAgent:
             )
             research_package = self._parse_response(response.content)
 
+            # Score research quality before emitting completion
+            quality_scores = self.score_research_quality(research_package)
+            research_package["_quality_scores"] = quality_scores
+
             if stream_callback:
                 await stream_callback(
                     StreamEvent(
                         event_type="research_complete",
                         agent="research",
-                        content="Research analysis complete.",
-                        data=research_package,
+                        content=f"Research analysis complete. Quality: {quality_scores['overall']:.0%}",
+                        data={**research_package, "quality": quality_scores},
                     )
                 )
 
-            logger.info("Research agent completed successfully")
+            logger.info("Research agent completed (quality=%.3f)", quality_scores["overall"])
             return research_package
 
         except Exception as e:
@@ -239,6 +243,62 @@ class ResearchAgent:
                     )
                 )
             raise
+
+    def score_research_quality(self, package: dict) -> dict:
+        """Score the quality and completeness of the research package.
+
+        Evaluates the research across 5 dimensions:
+        - Breadth: How many distinct areas were covered
+        - Depth: Average length/detail of data points
+        - Grounding: Whether web-sourced evidence is present
+        - Balance: Presence of both opportunities and risks
+        - Completeness: All 6 required fields populated
+
+        This score is included in the research_complete StreamEvent
+        so the frontend can display research quality indicators.
+
+        Args:
+            package: The parsed research package dict.
+
+        Returns:
+            Dict with dimension scores and overall quality score.
+        """
+        scores = {}
+
+        # Breadth: How many of the 6 fields have content?
+        required_fields = ["market_context", "key_data_points", "precedents",
+                          "stakeholders", "risk_landscape", "summary"]
+        populated = sum(1 for f in required_fields if package.get(f))
+        scores["breadth"] = round(populated / len(required_fields), 2)
+
+        # Depth: Average richness of list fields
+        list_fields = ["key_data_points", "precedents", "stakeholders", "risk_landscape"]
+        total_items = sum(len(package.get(f, [])) for f in list_fields)
+        scores["depth"] = round(min(total_items / 12, 1.0), 2)  # 12 items = max score
+
+        # Grounding: Check for source citations in data points
+        data_points = package.get("key_data_points", [])
+        grounded = sum(1 for d in data_points if isinstance(d, str) and ("source:" in d.lower() or "http" in d.lower()))
+        scores["grounding"] = round(grounded / max(len(data_points), 1), 2)
+
+        # Balance: Both opportunities (market_context) and risks present
+        has_opportunities = bool(package.get("market_context"))
+        has_risks = len(package.get("risk_landscape", [])) > 0
+        scores["balance"] = 1.0 if (has_opportunities and has_risks) else 0.5 if (has_opportunities or has_risks) else 0.0
+
+        # Completeness: Summary exists and is substantive
+        summary = package.get("summary", "")
+        scores["completeness"] = round(min(len(summary) / 200, 1.0), 2)
+
+        # Overall quality = weighted average
+        weights = {"breadth": 0.25, "depth": 0.25, "grounding": 0.2, "balance": 0.15, "completeness": 0.15}
+        overall = sum(scores[dim] * weights[dim] for dim in weights)
+        scores["overall"] = round(overall, 3)
+
+        logger.info("Research quality score: %.3f (breadth=%.2f, depth=%.2f, grounding=%.2f)",
+                    overall, scores["breadth"], scores["depth"], scores["grounding"])
+
+        return scores
 
     def _parse_response(self, response: str) -> dict:
         """Parse the LLM JSON response into a research package dict."""
