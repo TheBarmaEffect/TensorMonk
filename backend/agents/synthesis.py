@@ -1,4 +1,20 @@
-"""Synthesis Agent — produces an improved, battle-tested version of the original idea."""
+"""Synthesis Agent — produces an improved, battle-tested version of the original idea.
+
+Constitutional role: Neutral synthesizer. Takes the best from both sides.
+The Synthesis Agent is the ONLY agent that sees the complete proceeding:
+research, prosecution, defense, witness reports, and verdict.
+
+Produces a battle-tested version that:
+1. Preserves prosecution's strongest sustained claims
+2. Directly addresses every defense objection
+3. Incorporates witness findings into action items
+4. Uses domain-specific few-shot anchors for concrete recommendations
+
+Output quality is measured by:
+- Objection coverage: % of defense claims explicitly addressed
+- Action specificity: Whether recommended_actions include time bounds
+- Strength delta: improvement of strength_score over original confidence
+"""
 
 import asyncio
 import json
@@ -182,17 +198,26 @@ class SynthesisAgent:
                 strength_score=data.get("strength_score", 0.7),
             )
 
+            # Assess synthesis quality before emitting completion
+            coverage = self.assess_synthesis_coverage(
+                synthesis, defense_argument, prosecutor_argument,
+            )
+
             if stream_callback:
                 await stream_callback(
                     StreamEvent(
                         event_type="synthesis_complete",
                         agent="synthesis",
-                        content="Synthesis complete. Battle-tested version ready.",
-                        data=synthesis.model_dump(mode="json"),
+                        content=f"Synthesis complete. {coverage['objection_coverage']:.0%} objections addressed.",
+                        data={**synthesis.model_dump(mode="json"), "coverage": coverage},
                     )
                 )
 
-            logger.info("Synthesis complete, strength_score=%.2f", synthesis.strength_score)
+            logger.info(
+                "Synthesis complete — strength=%.2f, coverage=%.0f%%, delta=%+.3f",
+                synthesis.strength_score, coverage["objection_coverage"] * 100,
+                coverage["strength_delta"],
+            )
             return synthesis
 
         except Exception as e:
@@ -202,6 +227,70 @@ class SynthesisAgent:
                     StreamEvent(event_type="error", agent="synthesis", content=f"Synthesis error: {str(e)}")
                 )
             raise
+
+    def assess_synthesis_coverage(
+        self,
+        synthesis: Synthesis,
+        defense_argument: Argument,
+        prosecutor_argument: Argument,
+    ) -> dict:
+        """Assess how thoroughly the synthesis addresses the proceeding.
+
+        Measures objection coverage (how many defense claims are addressed),
+        action specificity (whether recommendations include time bounds),
+        and strength delta (improvement over original confidence).
+
+        Args:
+            synthesis: The produced synthesis output.
+            defense_argument: The defense's case (objections to address).
+            prosecutor_argument: The prosecution's case (points to preserve).
+
+        Returns:
+            Dict with coverage metrics for quality monitoring.
+        """
+        # Objection coverage: what fraction of defense claims appear addressed?
+        addressed_text = " ".join(synthesis.addressed_objections).lower()
+        def_claims_addressed = 0
+        for claim in defense_argument.claims:
+            # Check if any meaningful words from the claim appear in addressed text
+            claim_words = set(claim.statement.lower().split())
+            significant_words = {w for w in claim_words if len(w) > 4}
+            if significant_words:
+                overlap = sum(1 for w in significant_words if w in addressed_text)
+                if overlap >= len(significant_words) * 0.3:
+                    def_claims_addressed += 1
+
+        total_def_claims = max(len(defense_argument.claims), 1)
+        objection_coverage = round(def_claims_addressed / total_def_claims, 3)
+
+        # Action specificity: do recommended_actions include time indicators?
+        time_indicators = ("week", "month", "day", "quarter", "q1", "q2", "q3", "q4",
+                          "sprint", "phase", "stage", "step 1", "immediately", "within")
+        actions_text = " ".join(synthesis.recommended_actions).lower()
+        has_time_bounds = any(t in actions_text for t in time_indicators)
+        action_count = len(synthesis.recommended_actions)
+
+        # Strength delta: how much stronger is the synthesis vs prosecution's original
+        strength_delta = synthesis.strength_score - prosecutor_argument.confidence
+
+        metrics = {
+            "objection_coverage": objection_coverage,
+            "objections_addressed": def_claims_addressed,
+            "total_objections": total_def_claims,
+            "action_count": action_count,
+            "has_time_bounds": has_time_bounds,
+            "strength_delta": round(strength_delta, 3),
+            "strength_score": synthesis.strength_score,
+        }
+
+        logger.info(
+            "Synthesis coverage: %.0f%% objections addressed, %d actions%s, delta=%+.3f",
+            objection_coverage * 100, action_count,
+            " (time-bound)" if has_time_bounds else "",
+            strength_delta,
+        )
+
+        return metrics
 
     def _parse_json(self, response: str) -> dict:
         """Parse JSON from LLM response."""
