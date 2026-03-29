@@ -18,6 +18,22 @@ Exception hierarchy:
 from typing import Optional
 
 
+# Machine-readable error codes for API consumers and monitoring
+ERROR_CODES = {
+    "AGENT_TIMEOUT": "E1001",
+    "AGENT_PARSE_FAILURE": "E1002",
+    "AGENT_LLM_UNAVAILABLE": "E1003",
+    "SESSION_NOT_FOUND": "E2001",
+    "SESSION_EXPIRED": "E2002",
+    "SESSION_INVALID_STATE": "E2003",
+    "EXPORT_GENERATION_FAILED": "E3001",
+    "EXPORT_FORMAT_UNSUPPORTED": "E3002",
+    "VALIDATION_FAILED": "E4001",
+    "RATE_LIMITED": "E4002",
+    "XSS_DETECTED": "E4003",
+}
+
+
 class VerdictError(Exception):
     """Base exception for all Verdict application errors.
 
@@ -28,21 +44,26 @@ class VerdictError(Exception):
         self,
         message: str,
         *,
+        code: Optional[str] = None,
         session_id: Optional[str] = None,
         details: Optional[dict] = None,
     ):
         super().__init__(message)
+        self.code = code
         self.session_id = session_id
         self.details = details or {}
 
     def to_dict(self) -> dict:
         """Serialize to JSON-compatible dict for API responses."""
-        return {
+        result = {
             "error": type(self).__name__,
             "message": str(self),
             "session_id": self.session_id,
             "details": self.details,
         }
+        if self.code:
+            result["code"] = self.code
+        return result
 
 
 class AgentError(VerdictError):
