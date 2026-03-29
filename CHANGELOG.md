@@ -2,6 +2,34 @@
 
 All notable changes to the Verdict project.
 
+## [1.3.0] — 2026-03-29
+
+### Added — Intelligence-Driven Routing (ADR-006)
+- **Structural Cross-Examination**: Argument dependency graph analysis (critical paths, foundation claims, coherence differentials) passed into the judge's cross-examination prompt for smarter claim selection
+- **Impact-Weighted Witness Prioritization**: Contested claims reordered by cascading impact from DAG before witness spawning — high-impact foundation claims verified first
+- **Quality-Gap Witness Spawning**: When argument quality differential exceeds 0.2, witnesses are spawned even with zero contested claims to stress-test the weaker side
+- **Stability-Aware Synthesis**: Fragile verdicts (low robustness, narrow evidence margins) trigger cautious recommendations with contingency plans and monitoring triggers
+- **Domain-Aware Confidence Thresholds**: Medical (0.7), legal (0.65), financial (0.65), business (0.6), technology (0.55) — high-stakes domains require higher witness agreement
+- **Multi-Factor Confidence Gate**: 4-factor routing using domain-adjusted threshold, witness agreement ratio, confidence variance, and overrule detection
+
+### Added — Production-Grade Metrics
+- **Percentile Tracking**: p50/p95/p99 latency percentiles for per-agent and pipeline-wide metrics
+- **Error Rate Tracking**: Per-agent and pipeline-wide error rates in metrics summary
+- **Pipeline Progress Tracking**: Status endpoint returns completion percentage, current stage, stages remaining, and ETA
+
+### Refactored — Intelligence Pipeline
+- **VerdictState Extended**: Added `argument_quality`, `argument_graphs`, `verdict_stability` fields — computed intelligence now flows through the pipeline instead of being emitted-and-discarded
+- **Judge accepts structural_analysis**: `cross_examine()` method now receives argument graph intelligence for smarter claim selection
+- **Synthesis accepts stability/quality**: `run()` method now receives verdict stability and argument quality for calibrated recommendations
+
+### Testing
+- 418 total tests across 22 test files (up from 395)
+- Added 7 intelligence pipeline integration tests (VerdictState fields, graph flow, parameter wiring)
+- Added 10 percentile/error-rate metrics tests
+- Added 6 multi-factor confidence gate tests (domain thresholds, agreement, variance)
+- Added 2 quality-gap witness spawning tests
+- Added 1 progress tracking API test
+
 ## [1.2.0] — 2026-03-29
 
 ### Added — Core Pipeline Depth
