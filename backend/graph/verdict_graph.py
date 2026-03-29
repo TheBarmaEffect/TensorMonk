@@ -42,6 +42,7 @@ from utils.event_bus import pipeline_event_bus, PipelineEvent, EventPriority
 from utils.metrics import pipeline_metrics
 from utils.confidence_calibration import calibration_tracker
 from utils.argument_graph import build_argument_graphs
+from utils.verdict_stability import full_stability_analysis
 
 
 def strip_authorship(research_package: dict) -> dict:
@@ -607,12 +608,25 @@ async def _run_verdict(state: VerdictState, use_low_temp: bool = False) -> dict:
                 decision_id=decision["id"],
                 stream_callback=callback,
             )
+            # Run verdict stability analysis — perturbation testing
+            evidence_scores = judge.compute_evidence_score(pro_arg, def_arg, reports)
+            stability = full_stability_analysis(
+                prosecution_score=evidence_scores["prosecution_score"],
+                defense_score=evidence_scores["defense_score"],
+                ruling=verdict.ruling,
+                witness_reports=[w.model_dump(mode="json") for w in reports],
+                prosecution_base_confidence=pro_arg.confidence,
+                defense_base_confidence=def_arg.confidence,
+            )
+
             await pipeline_event_bus.publish(PipelineEvent(
                 topic="agent.judge.verdict.complete", session_id=tid,
                 payload={
                     "ruling": verdict.ruling,
                     "confidence": verdict.confidence,
                     "path": verdict_path,
+                    "stability": stability["combined_robustness"],
+                    "verdict_is_robust": stability["verdict_is_robust"],
                 },
             ))
             return {"verdict": verdict.model_dump(mode="json")}
