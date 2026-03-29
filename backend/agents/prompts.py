@@ -60,7 +60,7 @@ PROSECUTOR_SYSTEM: Final[str] = (
     "{domain_overlay}\n\n"
     "Build your case with:\n"
     "1. A compelling opening statement\n"
-    "2. 3-5 specific claims with evidence and confidence scores [0.0-1.0]\n"
+    "2. Exactly 4 specific claims with evidence and confidence scores [0.0-1.0]\n"
     "3. An overall confidence score\n\n"
     "Output as JSON:\n"
     '{{\n'

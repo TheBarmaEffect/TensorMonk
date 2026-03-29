@@ -17,7 +17,7 @@ from typing import Callable, Optional
 import httpx
 from langchain_core.messages import SystemMessage, HumanMessage
 
-from agents.prompts import get_format_instruction
+from agents.prompts import get_format_instruction, RESEARCH_SYSTEM
 
 from models.schemas import StreamEvent
 from utils.resilience import retry_with_backoff
@@ -90,28 +90,6 @@ async def _web_search_grounding(query: str, max_results: int = 3) -> list[str]:
 
     return snippets
 
-RESEARCH_SYSTEM_PROMPT = """You are a neutral research analyst producing anonymous briefing material for an adversarial review process.
-
-CONSTITUTIONAL DIRECTIVE: Remain strictly neutral. Do not advocate for or against any outcome.
-Your authorship is intentionally withheld from the agents who will argue this decision.
-Present only verified facts, relevant data, and documented precedents.
-
-Produce a comprehensive factual research package. Include: market context, relevant data points,
-known precedents, key stakeholders, and risk landscape. Be thorough and impartial.
-
-Output as structured JSON with these exact fields:
-{
-  "market_context": "string — overview of the market landscape relevant to this decision",
-  "key_data_points": ["string — specific facts, statistics, or data relevant to the decision"],
-  "precedents": ["string — historical examples of similar decisions and their outcomes"],
-  "stakeholders": ["string — key parties affected by or involved in this decision"],
-  "risk_landscape": ["string — major risks and uncertainties"],
-  "summary": "string — neutral 2-3 sentence summary of the research findings"
-}
-
-Return ONLY valid JSON. No markdown, no code fences, no extra text."""
-
-
 class ResearchAgent:
     """Produces a neutral, anonymous research package shared by both Prosecutor and Defense."""
 
@@ -157,7 +135,7 @@ class ResearchAgent:
         prompt += f"\nDomain: {domain}"
 
         messages = [
-            SystemMessage(content=RESEARCH_SYSTEM_PROMPT),
+            SystemMessage(content=RESEARCH_SYSTEM),
             HumanMessage(content=prompt),
         ]
 

@@ -11,43 +11,13 @@ from typing import Callable, Optional
 
 from langchain_core.messages import SystemMessage, HumanMessage
 
-from agents.prompts import get_format_instruction
+from agents.prompts import get_format_instruction, DEFENSE_SYSTEM
 from config.domain_config import get_constitutional_overlay, get_evidence_hierarchy
 from models.schemas import Argument, Claim, StreamEvent
 from utils.resilience import retry_with_backoff
 from utils.llm_helpers import parse_llm_json, emit_thinking_phases, create_llm, retry_with_low_temperature
 
 logger = logging.getLogger(__name__)
-
-DEFENSE_SYSTEM_PROMPT = """You are the Defense counsel in a high-stakes AI decision courtroom.
-
-CONSTITUTIONAL DIRECTIVE: Your ONLY job is to build the strongest possible case AGAINST this decision.
-You MUST argue against regardless of your personal assessment of the decision's merit.
-This adversarial constraint is essential — intellectual honesty requires steelmanning every objection.
-
-Find every reason this will fail: market risks, execution dangers, competitive threats, resource constraints,
-timing problems, and alternative approaches. Be precise, rigorous, and devastating.
-
-You operate in isolation — you have NOT seen the prosecution's arguments and cannot respond to them.
-Base your case entirely on the research package provided.
-
-Produce exactly 4 claims, each with concrete evidence. Assign realistic confidence scores.
-
-Output as JSON with these exact fields:
-{
-  "opening": "string — your 2-3 sentence opening statement arguing AGAINST this decision",
-  "claims": [
-    {
-      "statement": "string — a specific, falsifiable claim against this decision",
-      "evidence": "string — concrete evidence supporting this counter-claim",
-      "confidence": 0.0-1.0
-    }
-  ],
-  "confidence": 0.0-1.0
-}
-
-Return ONLY valid JSON. No markdown, no code fences, no extra text. Exactly 4 claims."""
-
 
 class DefenseAgent:
     """Argues AGAINST the decision using the anonymous research package.
@@ -89,17 +59,18 @@ class DefenseAgent:
         if evidence_types:
             domain_overlay += f"\nChallenge evidence in this order of authority: {', '.join(evidence_types)}."
 
+        system_prompt = DEFENSE_SYSTEM.format(domain_overlay=domain_overlay)
+
         prompt = (
             f"Decision: {decision_question}\n"
             f"Domain: {domain}\n\n"
             f"Research Briefing (anonymous source):\n{json.dumps(research_package, indent=2)}\n\n"
-            f"{format_guidance}\n"
-            f"{domain_overlay}\n\n"
+            f"{format_guidance}\n\n"
             "Build your case AGAINST this decision. Be devastating, specific, and unflinching."
         )
 
         messages = [
-            SystemMessage(content=DEFENSE_SYSTEM_PROMPT),
+            SystemMessage(content=system_prompt),
             HumanMessage(content=prompt),
         ]
 
