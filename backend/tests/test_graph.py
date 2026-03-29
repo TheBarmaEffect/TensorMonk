@@ -63,6 +63,22 @@ class TestConditionalEdges:
         state = {}
         assert _should_spawn_witnesses(state) == "verdict"
 
+    def test_spawn_witnesses_on_quality_gap(self):
+        """Large quality gap between sides should trigger witnesses even without contested claims."""
+        state = {
+            "contested_claims": [],
+            "argument_quality": {"quality_gap": 0.25, "weaker_side": "defense"},
+        }
+        assert _should_spawn_witnesses(state) == "witnesses"
+
+    def test_skip_witnesses_on_small_quality_gap(self):
+        """Small quality gap should not trigger witnesses alone."""
+        state = {
+            "contested_claims": [],
+            "argument_quality": {"quality_gap": 0.1, "weaker_side": "prosecution"},
+        }
+        assert _should_spawn_witnesses(state) == "verdict"
+
     def test_confidence_gate_normal(self):
         state = {"witness_reports": [
             {"confidence": 0.8, "verdict_on_claim": "sustained"},

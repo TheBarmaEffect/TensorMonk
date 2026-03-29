@@ -846,19 +846,39 @@ async def synthesis_node(state: VerdictState) -> dict:
 
 
 def _should_spawn_witnesses(state: VerdictState) -> str:
-    """Conditional edge: route to witnesses only if contested claims exist.
+    """Conditional edge: decide whether to spawn witnesses for verification.
 
-    This is the dynamic witness spawning gate — the Judge's cross-examination
-    determines which claims are contested and what type of witness specialist
-    to spawn for each. If no claims are contested, skip directly to verdict.
+    Uses two signals for the spawning decision:
+    1. Contested claims from cross-examination (primary gate)
+    2. Argument quality gap — if one side is significantly weaker (quality
+       gap > 0.2), witnesses are spawned even with few contested claims to
+       ensure the weaker argument is stress-tested.
+
+    This prevents low-quality arguments from sailing through un-verified
+    when the cross-examination happens to find few keyword overlaps.
     """
     contested = state.get("contested_claims", [])
+
+    # Primary gate: cross-examination identified contested claims
     if contested and len(contested) > 0:
         logger.info(
             "Conditional edge: spawning %d witnesses for contested claims",
             len(contested),
         )
         return "witnesses"
+
+    # Secondary gate: large quality gap between sides suggests one argument
+    # may be weak enough to need verification even without direct conflict.
+    quality_data = state.get("argument_quality")
+    if quality_data and quality_data.get("quality_gap", 0) > 0.2:
+        logger.info(
+            "Conditional edge: quality gap %.3f (weaker: %s) — "
+            "spawning witnesses despite no contested claims to stress-test weaker side",
+            quality_data["quality_gap"],
+            quality_data.get("weaker_side", "unknown"),
+        )
+        return "witnesses"
+
     logger.info("Conditional edge: no contested claims, skipping witnesses")
     return "verdict"
 
