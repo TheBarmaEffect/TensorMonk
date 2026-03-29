@@ -83,7 +83,7 @@ Build a **multi-agent adversarial AI courtroom** that takes any decision or idea
 | Research quality scoring (5 dimensions) | ✅ | `research.score_research_quality()` — breadth/depth/grounding/balance |
 | Synthesis coverage assessment | ✅ | `synthesis.assess_synthesis_coverage()` — objection/action/strength |
 | Argument strength analysis | ✅ | `judge.analyze_argument_strength()` pre-cross-examination |
-| 283 tests (unit + integration) | ✅ | 18 test files (pytest) |
+| 292 tests (unit + integration) | ✅ | 18 test files (pytest) |
 
 ### Pre-Committed Cut Rule
 > "Analytics charts are cut before the courtroom UI is degraded."
@@ -125,13 +125,13 @@ All Tier 2 features were moved to functional status. The courtroom UI was never 
 | test_metrics.py | 7 | Agent tracking, pipeline metrics |
 | test_security.py | 22 | XSS detection, input sanitization, security headers |
 | test_prompts.py | 22 | Constitutional directive auditing, prompt structure |
-| test_integration.py | 22 | Session lifecycle, domain detection, analytics flow |
+| test_integration.py | 31 | Session lifecycle, domain detection, analytics, claim overlap, research quality, synthesis coverage |
 | test_graph_viz.py | 17 | Pipeline topology, witness nodes, routing paths |
 | test_session_manager.py | 23 | FSM state transitions, lifecycle tracking, serialization |
 | test_validators.py | 22 | Question quality, research completeness, format-domain fit |
 | test_event_bus.py | 20 | Pub/sub delivery, topic matching, priority ordering |
 | test_calibration.py | 19 | ECE computation, overconfidence detection, domain tracking |
-| **Total** | **283** | |
+| **Total** | **292** | |
 
 ## Technical Decisions
 
