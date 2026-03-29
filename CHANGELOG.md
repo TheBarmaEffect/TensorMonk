@@ -2,6 +2,25 @@
 
 All notable changes to the Verdict project.
 
+## [1.2.0] — 2026-03-29
+
+### Added — Core Pipeline Depth
+- **Witness-Weighted Evidence Scoring**: `judge.compute_evidence_score()` adjusts prosecution/defense scores based on witness verdicts (sustained: +0.1×confidence, overruled: -0.15×confidence)
+- **Research Quality Scoring**: 5-dimension assessment (breadth, depth, grounding, balance, completeness) with weighted overall score in `research.score_research_quality()`
+- **Synthesis Coverage Assessment**: `synthesis.assess_synthesis_coverage()` measures objection coverage %, action time-boundedness, and strength delta
+- **Argument Strength Analysis**: `judge.analyze_argument_strength()` pre-cross-examination with per-side confidence stats and strength differential
+- **Claim Overlap Detection**: `judge.detect_claim_overlaps()` uses keyword overlap to find opposing claims on the same topic for witness prioritization
+- **Adaptive Temperature**: `_adaptive_temperature()` adjusts prosecutor/defense LLM temperature based on research quality scores — better research → more factual arguments
+- **Confidence Calibration Pipeline Integration**: `_calibrate_from_witnesses()` uses witness verdicts as ground truth for per-agent ECE tracking
+- **Constitutional Compliance Validation**: `_validate_constitutional_compliance()` checks that prosecution/defense arguments conform to their directives
+- **Pipeline-Wide Observability**: All 7 graph nodes emit start/complete/error events via async event bus with rich payloads
+
+### Testing
+- 298 total tests across 18 test files (up from 172)
+- Added graph pipeline tests: adaptive temperature, calibration wiring, constitutional compliance (31 tests)
+- Added agent-level integration tests: claim overlap, research quality, synthesis coverage (31 tests)
+- Added event bus, calibration, validators, and session FSM tests
+
 ## [1.1.0] — 2026-03-29
 
 ### Added
@@ -11,6 +30,10 @@ All notable changes to the Verdict project.
 - **Pipeline Graph Visualization**: Backend `graph_visualizer.py` generates structured pipeline topology with dynamic witness nodes; Frontend `PipelineGraph.jsx` renders vertical flow diagram with real-time status indicators
 - **Pipeline Graph Endpoints**: `GET /{id}/graph` (session-specific) and `GET /graph/topology` (static topology) for pipeline visualization
 - **Interactive Pipeline Sidebar**: Toggle pipeline view in courtroom UI showing agent execution flow with parallel branch display
+- **Async Event Bus**: Topic-based pub/sub with priority ordering and fire-and-forget delivery
+- **Confidence Calibration**: Bayesian ECE tracking per agent per domain with overconfidence detection
+- **Session State Machine**: 5-state FSM (created→running→complete/error/expired) with transition validation
+- **Domain-Aware Input Validators**: Question quality scoring, research package validation, format-domain compatibility
 
 ### Testing
 - 172 total tests across 14 test files (up from 106)
