@@ -138,3 +138,18 @@ class TestMetricsPercentiles:
             pass
         stats = m.summary()
         assert stats["pipeline"]["overall_error_rate"] == 0.0
+
+    def test_bottleneck_agent_detected(self):
+        import time
+        m = PipelineMetrics()
+        with m.track_agent("research"):
+            pass  # Fast
+        with m.track_agent("prosecutor"):
+            time.sleep(0.01)  # Slower
+        stats = m.summary()
+        assert stats["bottleneck_agent"] == "prosecutor"
+
+    def test_bottleneck_none_when_empty(self):
+        m = PipelineMetrics()
+        stats = m.summary()
+        assert stats["bottleneck_agent"] is None
