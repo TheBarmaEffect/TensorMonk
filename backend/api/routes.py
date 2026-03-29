@@ -350,6 +350,59 @@ async def get_result(session_id: str):
     return session["result"]
 
 
+@router.get("/{session_id}/analysis")
+async def get_analysis(session_id: str):
+    """Get analytical pipeline assessment for a completed session.
+
+    Returns argument quality grades, verdict stability analysis,
+    and argument dependency graph metrics for both sides.
+    """
+    from utils.argument_quality import score_argument_quality
+    from utils.verdict_stability import full_stability_analysis
+    from utils.argument_graph import build_argument_graphs
+
+    session = _get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if session["status"] != "complete":
+        raise HTTPException(status_code=202, detail="Session still in progress")
+
+    result = session.get("result", {})
+    pro_data = result.get("prosecutor_argument", {})
+    def_data = result.get("defense_argument", {})
+    verdict = result.get("verdict", {})
+    witnesses = result.get("witness_reports", [])
+
+    # Argument quality scoring
+    pro_quality = score_argument_quality(pro_data)
+    def_quality = score_argument_quality(def_data)
+
+    # Argument dependency graphs
+    pro_claims = pro_data.get("claims", []) if pro_data else []
+    def_claims = def_data.get("claims", []) if def_data else []
+    graph_analysis = build_argument_graphs(pro_claims, def_claims)
+
+    # Verdict stability
+    stability = full_stability_analysis(
+        prosecution_score=pro_data.get("confidence", 0.5) if pro_data else 0.5,
+        defense_score=def_data.get("confidence", 0.5) if def_data else 0.5,
+        ruling=verdict.get("ruling", "conditional") if verdict else "conditional",
+        witness_reports=witnesses,
+        prosecution_base_confidence=pro_data.get("confidence", 0.5) if pro_data else 0.5,
+        defense_base_confidence=def_data.get("confidence", 0.5) if def_data else 0.5,
+    )
+
+    return {
+        "session_id": session_id,
+        "argument_quality": {
+            "prosecution": pro_quality,
+            "defense": def_quality,
+        },
+        "argument_graphs": graph_analysis,
+        "verdict_stability": stability,
+    }
+
+
 @router.websocket("/{session_id}/stream")
 async def stream_verdict(websocket: WebSocket, session_id: str):
     """WebSocket endpoint that streams all agent events in real time.
