@@ -102,7 +102,7 @@ export default function LandingInput() {
           <div className="w-8 h-8 rounded-lg bg-gold/10 flex items-center justify-center">
             <span className="text-gold text-lg">⚖</span>
           </div>
-          <h1 className="text-xl font-semibold tracking-tight text-[var(--text-primary)]">Verdict</h1>
+          <h1 className="text-2xl font-semibold tracking-tight text-[var(--text-primary)]" style={{ fontFamily: 'var(--font-heading)' }}>Verdict</h1>
         </div>
         <p className="text-[var(--text-muted)] text-sm">
           Multi-agent AI courtroom for adversarial decision analysis

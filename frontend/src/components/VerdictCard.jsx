@@ -76,7 +76,7 @@ export default function VerdictCard({ verdict }) {
               animate={{ opacity: 1, x: 0 }}
               transition={{ duration: 0.6, delay: 0.8 }}
               className="text-2xl font-semibold tracking-tight"
-              style={{ color: rulingColor }}
+              style={{ color: rulingColor, fontFamily: 'var(--font-heading)' }}
             >
               {rulingLabel}
             </motion.h2>

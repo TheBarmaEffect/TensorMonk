@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -38,6 +38,7 @@
   --gold-light: #e0be72;
   --gold-dark: #b08d3e;
 
+  --font-heading: 'Cormorant Garamond', 'Georgia', serif;
   --font-body: 'Inter', -apple-system, system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', 'SF Mono', monospace;
 
