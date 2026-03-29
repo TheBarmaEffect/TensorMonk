@@ -112,7 +112,7 @@ Build a **multi-agent adversarial AI courtroom** that takes any decision or idea
 | Structural cross-examination | ✅ | Judge receives argument graph critical paths + foundation claims for smarter claim selection |
 | Impact-weighted witness prioritization | ✅ | Contested claims reordered by DAG cascading impact before witness spawning |
 | Stability-aware synthesis | ✅ | Fragile verdicts trigger cautious recommendations with contingency plans |
-| 418 tests (unit + integration) | ✅ | 22 test files (pytest) |
+| 426 tests (unit + integration) | ✅ | 22 test files (pytest) |
 
 ### Pre-Committed Cut Rule
 > "Analytics charts are cut before the courtroom UI is degraded."
@@ -159,12 +159,12 @@ All Tier 2 features were moved to functional status. The courtroom UI was never 
 | test_session_manager.py | 23 | FSM state transitions, lifecycle tracking, serialization |
 | test_validators.py | 22 | Question quality, research completeness, format-domain fit |
 | test_event_bus.py | 20 | Pub/sub delivery, topic matching, priority ordering |
-| test_calibration.py | 19 | ECE computation, overconfidence detection, domain tracking |
+| test_calibration.py | 27 | ECE computation, overconfidence detection, domain tracking, Platt scaling, isotonic regression (PAVA) |
 | test_argument_graph.py | 23 | DAG construction, degree metrics, coherence, cascading impact |
 | test_verdict_stability.py | 17 | Evidence margin, perturbation Monte Carlo, flip rate bounds |
 | test_argument_quality.py | 24 | Specificity, diversity, calibration, coherence, grading |
 | test_llm_helpers.py | 23 | JSON parsing, code fence stripping, thinking phases, LLM factory, low-temp retry |
-| **Total** | **418** | |
+| **Total** | **426** | |
 
 ## Technical Decisions
 
