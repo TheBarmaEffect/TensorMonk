@@ -17,6 +17,7 @@ from config import settings
 from api.routes import router
 from middleware.rate_limiter import RateLimiterMiddleware
 from middleware.request_timing import RequestTimingMiddleware
+from middleware.security import SecurityMiddleware
 from utils.metrics import pipeline_metrics
 
 # Configure logging
@@ -38,6 +39,7 @@ app = FastAPI(
 
 # ─── Middleware stack (order matters: outermost first) ───
 app.add_middleware(RequestTimingMiddleware)
+app.add_middleware(SecurityMiddleware, max_body_size=2_097_152)  # 2 MB
 app.add_middleware(
     RateLimiterMiddleware,
     rpm=int(os.getenv("RATE_LIMIT_RPM", "60")),
