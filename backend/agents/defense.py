@@ -9,10 +9,8 @@ import json
 import logging
 from typing import Callable, Optional
 
-from langchain_groq import ChatGroq
 from langchain_core.messages import SystemMessage, HumanMessage
 
-from config import settings
 from config.domain_config import get_constitutional_overlay, get_evidence_hierarchy
 from models.schemas import Argument, Claim, StreamEvent
 from utils.resilience import retry_with_backoff
@@ -169,25 +167,18 @@ class DefenseAgent:
             raise
 
     def _parse_response(self, response: str) -> Argument:
-        """Parse LLM output into a structured Argument."""
-        cleaned = response.strip()
-        if cleaned.startswith("```"):
-            cleaned = cleaned.split("\n", 1)[1] if "\n" in cleaned else cleaned[3:]
-            if cleaned.endswith("```"):
-                cleaned = cleaned[:-3]
-            cleaned = cleaned.strip()
-
-        try:
-            data = json.loads(cleaned)
-        except json.JSONDecodeError:
-            logger.warning("Failed to parse defense JSON, creating fallback")
-            data = {
-                "opening": cleaned[:300],
+        """Parse LLM output into a structured Argument — delegates to shared utility."""
+        data = parse_llm_json(
+            response,
+            fallback={
+                "opening": response.strip()[:300],
                 "claims": [
-                    {"statement": "Argument parsing failed", "evidence": cleaned[:200], "confidence": 0.5}
+                    {"statement": "Argument parsing failed", "evidence": response.strip()[:200], "confidence": 0.5}
                 ],
                 "confidence": 0.5,
-            }
+            },
+            operation_name="Defense",
+        )
 
         claims = [
             Claim(

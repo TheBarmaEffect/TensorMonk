@@ -21,10 +21,8 @@ import json
 import logging
 from typing import Callable, Optional
 
-from langchain_groq import ChatGroq
 from langchain_core.messages import SystemMessage, HumanMessage
 
-from config import settings
 from config.domain_config import get_synthesis_anchors, get_suggested_format
 from utils.resilience import retry_with_backoff
 from utils.llm_helpers import parse_llm_json, emit_thinking_phases, create_llm, retry_with_low_temperature
