@@ -67,26 +67,63 @@ class TestConditionalEdges:
         state = {"witness_reports": [
             {"confidence": 0.8, "verdict_on_claim": "sustained"},
             {"confidence": 0.7, "verdict_on_claim": "sustained"},
-        ]}
+        ], "domain": "business"}
         assert _confidence_gate(state) == "verdict"
 
     def test_confidence_gate_low_confidence(self):
         state = {"witness_reports": [
             {"confidence": 0.3, "verdict_on_claim": "inconclusive"},
             {"confidence": 0.4, "verdict_on_claim": "sustained"},
-        ]}
+        ], "domain": "business"}
         assert _confidence_gate(state) == "verdict_with_review"
 
     def test_confidence_gate_hallucination_guard(self):
         state = {"witness_reports": [
             {"confidence": 0.95, "verdict_on_claim": "overruled"},
             {"confidence": 0.92, "verdict_on_claim": "sustained"},
-        ]}
+        ], "domain": "business"}
         assert _confidence_gate(state) == "verdict_low_temp"
 
     def test_confidence_gate_empty_reports(self):
         state = {"witness_reports": []}
         assert _confidence_gate(state) == "verdict"
+
+    def test_confidence_gate_domain_medical_higher_threshold(self):
+        """Medical domain requires higher confidence (0.7 vs 0.6)."""
+        state = {"witness_reports": [
+            {"confidence": 0.62, "verdict_on_claim": "sustained"},
+            {"confidence": 0.65, "verdict_on_claim": "sustained"},
+        ], "domain": "medical"}
+        # avg=0.635 which is below medical threshold (0.7) but above business (0.6)
+        assert _confidence_gate(state) == "verdict_with_review"
+
+    def test_confidence_gate_domain_technology_lower_threshold(self):
+        """Technology domain has a lower threshold (0.55)."""
+        state = {"witness_reports": [
+            {"confidence": 0.56, "verdict_on_claim": "sustained"},
+            {"confidence": 0.58, "verdict_on_claim": "sustained"},
+        ], "domain": "technology"}
+        # avg=0.57 which is above tech threshold (0.55)
+        assert _confidence_gate(state) == "verdict"
+
+    def test_confidence_gate_low_agreement_routes_to_review(self):
+        """When witnesses disagree (mixed verdicts), route to review."""
+        state = {"witness_reports": [
+            {"confidence": 0.8, "verdict_on_claim": "sustained"},
+            {"confidence": 0.8, "verdict_on_claim": "overruled"},
+            {"confidence": 0.8, "verdict_on_claim": "inconclusive"},
+        ], "domain": "business"}
+        # No majority (each verdict appears once) → agreement < 0.5
+        assert _confidence_gate(state) == "verdict_with_review"
+
+    def test_confidence_gate_high_variance_routes_to_review(self):
+        """When witness confidence levels diverge widely, route to review."""
+        state = {"witness_reports": [
+            {"confidence": 0.95, "verdict_on_claim": "sustained"},
+            {"confidence": 0.3, "verdict_on_claim": "sustained"},
+        ], "domain": "business"}
+        # avg=0.625 (above threshold), but variance is high (~0.106)
+        assert _confidence_gate(state) == "verdict_with_review"
 
 
 class TestGraphTopology:

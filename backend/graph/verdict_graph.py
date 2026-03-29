@@ -788,47 +788,104 @@ def _should_spawn_witnesses(state: VerdictState) -> str:
 LOW_CONFIDENCE_THRESHOLD = 0.6
 HIGH_CONFIDENCE_OVERRULE_THRESHOLD = 0.9
 
+# Domain-specific confidence thresholds — domains with higher stakes
+# require higher witness agreement before proceeding without review.
+DOMAIN_CONFIDENCE_THRESHOLDS: dict[str, float] = {
+    "medical": 0.7,    # Medical decisions require higher confidence
+    "legal": 0.65,     # Legal decisions have moderate risk threshold
+    "financial": 0.65, # Financial decisions need careful verification
+    "business": 0.6,   # Default business threshold
+    "technology": 0.55, # Technical decisions can tolerate more uncertainty
+    "hiring": 0.6,     # Hiring decisions at default threshold
+}
+
 
 def _confidence_gate(state: VerdictState) -> str:
-    """Conditional edge: evaluate witness confidence before routing to verdict.
+    """Multi-factor conditional edge: evaluate witness evidence before routing.
 
-    This implements the confidence-based interrupt_before mechanism:
-    - If avg witness confidence < 0.6: flags low_confidence in state for the
-      verdict node to handle (when interrupt_before is enabled, the graph
-      pauses here for human review).
-    - If confidence >= 0.9 AND any witness overruled a claim: triggers
-      hallucination guard flag so verdict node uses temperature=0.3.
-    - Normal confidence: routes directly to verdict with no flags.
+    Uses four factors for verdict routing:
+    1. Average witness confidence (domain-adjusted threshold)
+    2. Witness agreement ratio (what fraction agree on verdict direction)
+    3. Overrule detection (high confidence + overruled = hallucination risk)
+    4. Confidence variance (high disagreement among witnesses → review)
+
+    Routing outcomes:
+    - verdict_with_review: low confidence OR high variance OR low agreement
+    - verdict_low_temp: high confidence + overruled (hallucination guard)
+    - verdict: normal path (sufficient agreement and confidence)
     """
     witness_data = state.get("witness_reports", [])
     if not witness_data:
         return "verdict"
 
+    domain = state.get("domain", "business")
+    low_threshold = DOMAIN_CONFIDENCE_THRESHOLDS.get(domain, LOW_CONFIDENCE_THRESHOLD)
+
     confidences = []
+    verdicts_on_claims = []
     has_overruled = False
     for w in witness_data:
         if isinstance(w, dict):
             conf = w.get("confidence", 0.5)
-            if w.get("verdict_on_claim") == "overruled":
+            verdict_val = w.get("verdict_on_claim", "inconclusive")
+            if verdict_val == "overruled":
                 has_overruled = True
+            verdicts_on_claims.append(verdict_val)
         else:
             conf = 0.5
+            verdicts_on_claims.append("inconclusive")
         confidences.append(conf)
 
-    avg_confidence = sum(confidences) / len(confidences) if confidences else 0.5
+    n = len(confidences)
+    avg_confidence = sum(confidences) / n
+
+    # Factor 2: Witness agreement ratio — what fraction of witnesses agree?
+    # High disagreement (e.g., one sustained, one overruled) suggests the
+    # evidence is genuinely contested and warrants careful review.
+    verdict_counts: dict[str, int] = {}
+    for v in verdicts_on_claims:
+        verdict_counts[v] = verdict_counts.get(v, 0) + 1
+    majority_count = max(verdict_counts.values()) if verdict_counts else 0
+    agreement_ratio = majority_count / n if n > 0 else 1.0
+
+    # Factor 3: Confidence variance — high spread means witnesses disagree
+    # on how certain they are, even if average looks acceptable.
+    mean_conf = avg_confidence
+    variance = sum((c - mean_conf) ** 2 for c in confidences) / n if n > 1 else 0.0
+
     logger.info(
-        "Confidence gate: avg=%.2f, witnesses=%d, has_overruled=%s",
-        avg_confidence, len(confidences), has_overruled,
+        "Confidence gate [%s]: avg=%.2f (threshold=%.2f), agreement=%.0f%%, "
+        "variance=%.3f, witnesses=%d, has_overruled=%s",
+        domain, avg_confidence, low_threshold, agreement_ratio * 100,
+        variance, n, has_overruled,
     )
 
-    if avg_confidence < LOW_CONFIDENCE_THRESHOLD:
+    # Route to review if confidence is low OR witnesses strongly disagree
+    if avg_confidence < low_threshold:
         logger.warning(
-            "Low witness confidence (%.2f < %.2f) — interrupt_before checkpoint engaged, "
-            "human review recommended before verdict",
-            avg_confidence, LOW_CONFIDENCE_THRESHOLD,
+            "Low witness confidence (%.2f < %.2f for %s domain) — "
+            "routing to verdict_with_review",
+            avg_confidence, low_threshold, domain,
         )
         return "verdict_with_review"
 
+    if agreement_ratio < 0.5 and n >= 2:
+        logger.warning(
+            "Low witness agreement (%.0f%%) — witnesses disagree on claim "
+            "verdicts, routing to verdict_with_review for cautious ruling",
+            agreement_ratio * 100,
+        )
+        return "verdict_with_review"
+
+    if variance > 0.06 and n >= 2:
+        logger.warning(
+            "High confidence variance (%.3f) — witness certainty levels diverge "
+            "significantly, routing to verdict_with_review",
+            variance,
+        )
+        return "verdict_with_review"
+
+    # Hallucination guard: confident witnesses overruling claims is suspicious
     if avg_confidence >= HIGH_CONFIDENCE_OVERRULE_THRESHOLD and has_overruled:
         logger.warning(
             "High confidence (%.2f) with overruled claims — hallucination guard: "
