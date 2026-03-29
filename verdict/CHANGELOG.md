@@ -31,7 +31,7 @@ All notable changes to the Verdict project.
 - **Session data cleanup**: Removed 1362 session JSON files from git tracking; added .gitignore rules to prevent future bulk commits.
 
 ### Testing
-- 496 total tests across 22 test files (up from 426)
+- 503 total tests across 22 test files (up from 426)
 - Added 7 sensitivity analysis tests (pivotal detection, fragility scoring, leave-one-out)
 - Added 11 TF-IDF and topological sort tests
 - Added 5 cross-graph analysis tests (shared evidence, contradictory foundations)
