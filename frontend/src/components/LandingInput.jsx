@@ -63,7 +63,12 @@ export default function LandingInput() {
   const handleSubmit = async () => {
     if (!text.trim() || isSubmitting) return
     setIsSubmitting(true)
-    await submit(text.trim(), null, format)
+    try {
+      await submit(text.trim(), null, format)
+    } catch (err) {
+      console.error('Submit failed:', err)
+      setIsSubmitting(false)
+    }
   }
 
   const handleKeyDown = (e) => {
