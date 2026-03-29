@@ -140,3 +140,115 @@ class TestCalibrationTracker:
         assert "agents" in summary
         assert "domains" in summary
         assert "prosecutor" in summary["agents"]
+
+
+class TestPlattScaling:
+    """Test Platt scaling logistic calibration."""
+
+    def test_insufficient_data_returns_not_fitted(self):
+        cal = AgentCalibration("test_agent")
+        cal.record(0.9, True)
+        result = cal.fit_platt_scaling()
+        assert result["fitted"] is False
+
+    def test_platt_fitting_with_sufficient_data(self):
+        cal = AgentCalibration("test_agent")
+        # Overconfident agent: says 0.9 but correct ~60% of time
+        for _ in range(6):
+            cal.record(0.9, True)
+        for _ in range(4):
+            cal.record(0.9, False)
+        # Low confidence, usually correct
+        for _ in range(8):
+            cal.record(0.3, True)
+        for _ in range(2):
+            cal.record(0.3, False)
+
+        result = cal.fit_platt_scaling()
+        assert result["fitted"] is True
+        assert "a" in result
+        assert "b" in result
+        assert "loss" in result
+        assert result["samples"] == 20
+
+    def test_platt_calibrate_returns_bounded(self):
+        cal = AgentCalibration("test_agent")
+        for _ in range(10):
+            cal.record(0.8, True)
+        for _ in range(5):
+            cal.record(0.8, False)
+        cal.fit_platt_scaling()
+
+        calibrated = cal.calibrate_confidence(0.8)
+        assert 0.0 <= calibrated <= 1.0
+
+    def test_calibrate_without_fit_returns_raw(self):
+        cal = AgentCalibration("test_agent")
+        assert cal.calibrate_confidence(0.75) == 0.75
+
+    def test_platt_in_summary(self):
+        cal = AgentCalibration("test_agent")
+        for _ in range(10):
+            cal.record(0.7, True)
+        for _ in range(5):
+            cal.record(0.7, False)
+        cal.fit_platt_scaling()
+        summary = cal.summary()
+        assert "platt_scaling" in summary
+        assert "a" in summary["platt_scaling"]
+
+
+class TestIsotonicRegression:
+    """Test PAVA isotonic calibration."""
+
+    def test_insufficient_bins_returns_not_fitted(self):
+        cal = AgentCalibration("test_agent")
+        cal.record(0.5, True)
+        result = cal.fit_isotonic_regression()
+        assert result["fitted"] is False
+
+    def test_isotonic_fitting_with_monotonic_data(self):
+        cal = AgentCalibration("test_agent")
+        # Already monotonic: low conf → low accuracy, high → high
+        for _ in range(5):
+            cal.record(0.15, False)
+        for _ in range(3):
+            cal.record(0.15, True)
+        for _ in range(7):
+            cal.record(0.55, True)
+        for _ in range(3):
+            cal.record(0.55, False)
+        for _ in range(9):
+            cal.record(0.85, True)
+        for _ in range(1):
+            cal.record(0.85, False)
+
+        result = cal.fit_isotonic_regression()
+        assert result["fitted"] is True
+        assert result["violations_fixed"] == 0  # Already monotonic
+
+    def test_isotonic_fixes_violations(self):
+        cal = AgentCalibration("test_agent")
+        # Non-monotonic: mid-confidence has HIGHER accuracy than high
+        for _ in range(3):
+            cal.record(0.25, True)
+        for _ in range(7):
+            cal.record(0.25, False)
+        # Mid-conf: 90% accuracy (violation)
+        for _ in range(9):
+            cal.record(0.55, True)
+        for _ in range(1):
+            cal.record(0.55, False)
+        # High-conf: 50% accuracy (should be higher than mid!)
+        for _ in range(5):
+            cal.record(0.85, True)
+        for _ in range(5):
+            cal.record(0.85, False)
+
+        result = cal.fit_isotonic_regression()
+        assert result["fitted"] is True
+        assert result["violations_fixed"] >= 1
+        # Calibrated values should be non-decreasing
+        probs = result["calibrated_probabilities"]
+        for i in range(len(probs) - 1):
+            assert probs[i] <= probs[i + 1] + 0.001  # Monotone
