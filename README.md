@@ -115,7 +115,7 @@ User Input (question + context + output_format)
 - Session history: persistent JSON-backed session store via `GET /api/verdict/sessions/history`, displayed in frontend `SessionHistory` component
 - Verdict sharing: `GET /api/verdict/{id}/share` generates short URL token, `GET /shared/{token}` retrieves results
 - Web search grounding: Research Agent queries Tavily (or DuckDuckGo fallback) for current facts before LLM analysis
-- 234 tests across 16 test files: schemas, graph, API, exports, resilience, cache, middleware, domain config, errors, metrics, security, prompts, integration, graph viz, session FSM, validators (pytest)
+- 273 tests across 18 test files: schemas, graph, API, exports, resilience, cache, middleware, domain config, errors, metrics, security, prompts, integration, graph viz, session FSM, validators, event bus, calibration (pytest)
 - Input validation on all API request models (question length, context length, format enum)
 - Rate limiting middleware: token bucket per IP with configurable RPM/burst
 - Request timing middleware: X-Request-ID + X-Response-Time headers on all responses
@@ -131,6 +131,9 @@ User Input (question + context + output_format)
 - Centralized prompt templates: all agent prompts in `agents/prompts.py` with constitutional directive auditing
 - Session analytics: aggregate ruling distribution, domain breakdown, format usage via `/sessions/analytics`
 - Pipeline graph visualization: structured topology generation with dynamic witness nodes and routing paths
+- Async event bus: topic-based pub/sub with fire-and-forget delivery for pipeline observability
+- Confidence calibration: Bayesian ECE tracking per agent per domain with overconfidence detection
+- Domain-aware input validators: question quality scoring, research package completeness, format-domain compatibility
 - py.typed PEP 561 marker for static type checking support
 
 **Frontend (fully functional)**

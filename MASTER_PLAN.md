@@ -73,7 +73,10 @@ Build a **multi-agent adversarial AI courtroom** that takes any decision or idea
 | Session analytics aggregation | ✅ | `GET /sessions/analytics` endpoint |
 | Keyboard shortcuts | ✅ | `useKeyboardShortcuts.js` with 6 shortcuts |
 | ARIA accessibility | ✅ | roles, labels, described-by across components |
-| 234 tests (unit + integration) | ✅ | 16 test files (pytest) |
+| Async event bus (Observer pattern) | ✅ | `utils/event_bus.py` with topic pub/sub |
+| Confidence calibration (ECE) | ✅ | `utils/confidence_calibration.py` per-agent tracking |
+| Domain-aware input validators | ✅ | `utils/validators.py` with quality scoring |
+| 273 tests (unit + integration) | ✅ | 18 test files (pytest) |
 
 ### Pre-Committed Cut Rule
 > "Analytics charts are cut before the courtroom UI is degraded."
@@ -119,7 +122,9 @@ All Tier 2 features were moved to functional status. The courtroom UI was never 
 | test_graph_viz.py | 17 | Pipeline topology, witness nodes, routing paths |
 | test_session_manager.py | 23 | FSM state transitions, lifecycle tracking, serialization |
 | test_validators.py | 22 | Question quality, research completeness, format-domain fit |
-| **Total** | **234** | |
+| test_event_bus.py | 20 | Pub/sub delivery, topic matching, priority ordering |
+| test_calibration.py | 19 | ECE computation, overconfidence detection, domain tracking |
+| **Total** | **273** | |
 
 ## Technical Decisions
 
