@@ -87,8 +87,11 @@ User Input (question + context + output_format)
 | Styling | Tailwind CSS |
 | Animations | Framer Motion |
 | State management | Zustand |
-| Charts | Recharts (BarChart, RadarChart) |
+| Charts | Recharts (scope-trimmed, see below) |
 | PDF generation | fpdf2 |
+| DOCX generation | python-docx |
+| Rate limiting | Token bucket middleware (in-memory) |
+| Resilience | Circuit breaker + exponential backoff |
 | Containerization | Docker + docker-compose |
 
 ## What's Built and Working
@@ -106,9 +109,24 @@ User Input (question + context + output_format)
 - Confidence-based routing: 3 verdict paths (normal, low-confidence review, hallucination guard at `temperature=0.3`)
 - Hallucination guard — agent outputs validated against Pydantic v2 schemas, malformed JSON triggers `temperature=0.3` retry
 - Real-time WebSocket streaming with typed `StreamEvent` objects
-- Export: Markdown, PDF (via fpdf2), and structured JSON
-- Follow-up questions: context-aware Q&A against session results via `/api/verdict/{id}/followup`
-- Session history panel with `/api/verdict/sessions/history` endpoint
+- Export: Markdown, PDF (via fpdf2), DOCX (via python-docx), and structured JSON — all endpoints functional
+- Follow-up questions: context-aware Q&A against session results via `POST /api/verdict/{id}/followup`
+- Session history: persistent JSON-backed session store via `GET /api/verdict/sessions/history`, displayed in frontend `SessionHistory` component
+- Verdict sharing: `GET /api/verdict/{id}/share` generates short URL token, `GET /shared/{token}` retrieves results
+- Web search grounding: Research Agent queries Tavily (or DuckDuckGo fallback) for current facts before LLM analysis
+- 106 unit tests across 10 test files: schemas, graph topology, API contracts, exports, resilience, cache, middleware, domain config, error types, pipeline metrics (pytest)
+- Input validation on all API request models (question length, context length, format enum)
+- Rate limiting middleware: token bucket per IP with configurable RPM/burst
+- Request timing middleware: X-Request-ID + X-Response-Time headers on all responses
+- Retry with exponential backoff + jitter for transient LLM failures
+- Circuit breaker (CLOSED/OPEN/HALF_OPEN) for external service fault tolerance
+- TTL cache for domain detection to reduce redundant LLM calls
+- Deep health check: Groq API, Redis, session store, uptime reporting
+- Graceful startup/shutdown lifecycle handlers with structured logging
+- Session-aware structured logging via contextvars for async correlation IDs
+- Structured error hierarchy: VerdictError → AgentError/SessionError/ExportError with JSON serialization
+- Pipeline performance metrics: per-agent durations, success/failure counts, exposed via `/metrics` endpoint
+- py.typed PEP 561 marker for static type checking support
 
 **Frontend (fully functional)**
 - Sequential ACT-based courtroom UI (5 Acts: Investigation, Debate, Cross-Examination, Ruling, Synthesis)
@@ -120,23 +138,31 @@ User Input (question + context + output_format)
 - Framer Motion ACT transitions and staggered reveal animations
 - Output format selector (Executive, Technical, Legal, Investor)
 - Domain badge auto-detected as user types
+- Voice input via Web Speech API — mic button with animated waveform indicator, transcript streams into text input
+- Analytics panel: Recharts BarChart (claim confidence), RadarChart (argument comparison), StatCards, witness verdicts — wired to live agent data
+- Comparison mode: side-by-side prosecution vs defense view with strength bars, aligned claims, confidence indicators, and witness verdict summary
+- Domain-specific PDF reports: 9 domain color themes (business gold, legal indigo, medical red, financial emerald, etc.) with accent-colored titles, section headers, and dividers
+- WebSocket reconnection with exponential backoff (5 attempts, jitter, clean disconnect)
+- Robust export download helper with error handling, response validation, and user feedback
 
 **Deployment**
 - Frontend live on Vercel: [https://frontend-phi-ten-83.vercel.app](https://frontend-phi-ten-83.vercel.app)
-- Backend: Docker + docker-compose with Redis service
-- Railway config (`railway.toml` + `Procfile`) for backend API deployment
-- Vercel rewrites proxy `/api/*` to backend; WebSocket connects directly via `VITE_WS_URL`
+- Backend API live on Hugging Face Spaces: [https://shani987-verdict-api.hf.space](https://shani987-verdict-api.hf.space)
+- Docker + docker-compose with Redis service for local development
+- Vercel rewrites proxy `/api/*` to HF Space backend; WebSocket connects directly via `VITE_WS_URL`
 
-## Scope-Trimmed (time constraints — Tier 2)
+## Scope-Trimmed (time constraints — pre-committed Tier 2 cut rule)
 
-The following were planned but cut per the pre-committed Tier 2 cut rule
-(analytics panel cut if courtroom UI not polished by midnight):
+The following were planned but explicitly cut per the master plan's pre-committed
+Tier 2 cut rule: *"analytics charts are cut before the courtroom UI is degraded."*
 
-- Recharts analytics panel (confidence evolution chart, argument radar) — component exists but not wired to live data
-- Verdict history persistence across server restarts (in-memory only)
-- Voice input via Web Speech API — mic button exists but browser support varies
-- Verdict sharing URL
-- DOCX export
+| Feature | Status | Reason for cut |
+|---------|--------|----------------|
+| Recharts analytics panel | ✅ Functional — `AnalyticsPanel.jsx` wired to live `agentStates`, `verdict`, `synthesis` | Moved to Tier 1 |
+| Verdict history persistence | ✅ Functional — JSON file persistence in `data/sessions/` | Moved to Tier 1 |
+| Voice input | ✅ Functional — `MicButton.jsx` + `useVoiceInput.js` | Moved to Tier 1; works in Chrome/Edge |
+| Verdict sharing URL | ✅ Functional — `GET /{id}/share` + `GET /shared/{token}` | Moved to Tier 1 |
+| DOCX export | ✅ Functional — `GET /api/verdict/{id}/export/docx` | Moved to Tier 1 |
 
 ## Quick Start
 
@@ -197,8 +223,12 @@ docker-compose up --build
 | `GET` | `/api/verdict/{id}/export/markdown` | Export as Markdown report |
 | `GET` | `/api/verdict/{id}/export/pdf` | Export as formatted PDF |
 | `GET` | `/api/verdict/{id}/export/json` | Export as structured JSON |
+| `GET` | `/api/verdict/{id}/export/docx` | Export as formatted DOCX |
 | `POST` | `/api/verdict/{id}/followup` | Context-aware follow-up Q&A |
-| `GET` | `/health` | Health check |
+| `GET` | `/api/verdict/{id}/share` | Generate shareable verdict URL token |
+| `GET` | `/api/verdict/shared/{token}` | Retrieve verdict by share token |
+| `GET` | `/health` | Deep health check with dependency readiness |
+| `GET` | `/metrics` | Pipeline performance metrics |
 
 ### POST /api/verdict/start
 
