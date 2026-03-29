@@ -170,6 +170,17 @@ class CircuitBreaker:
         self._failure_count = 0
         logger.info("[CircuitBreaker:%s] Manually reset", self.name)
 
+    def summary(self) -> dict[str, Any]:
+        """Return circuit breaker status for health checks and metrics."""
+        return {
+            "name": self.name,
+            "state": self.state.value,
+            "failure_count": self._failure_count,
+            "success_count": self._success_count,
+            "failure_threshold": self.failure_threshold,
+            "recovery_timeout_s": self.recovery_timeout,
+        }
+
 
 class CircuitOpenError(Exception):
     """Raised when a circuit breaker is open and rejecting requests."""
