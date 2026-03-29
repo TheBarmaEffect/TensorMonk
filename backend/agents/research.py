@@ -25,6 +25,9 @@ from utils.llm_helpers import parse_llm_json, emit_thinking_phases, create_llm
 
 logger = logging.getLogger(__name__)
 
+# Maximum question length for LLM context window management
+MAX_QUESTION_LENGTH = 2000
+
 
 # ---------------------------------------------------------------------------
 # Lightweight web retrieval for factual grounding
