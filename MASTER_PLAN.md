@@ -66,7 +66,7 @@ Build a **multi-agent adversarial AI courtroom** that takes any decision or idea
 | Input validation | ✅ | Pydantic field_validator on all API models |
 | Deep health checks | ✅ | Groq, Redis, session store, uptime |
 | Structured logging | ✅ | contextvars session correlation IDs |
-| 106 unit tests | ✅ | 10 test files (pytest) |
+| 172 tests (unit + integration) | ✅ | 14 test files (pytest) |
 
 ### Pre-Committed Cut Rule
 > "Analytics charts are cut before the courtroom UI is degraded."
@@ -106,7 +106,11 @@ All Tier 2 features were moved to functional status. The courtroom UI was never 
 | test_domain_config.py | 4 | YAML loading, constitutional overlays |
 | test_errors.py | 10 | Error hierarchy, JSON serialization |
 | test_metrics.py | 7 | Agent tracking, pipeline metrics |
-| **Total** | **106** | |
+| test_security.py | 22 | XSS detection, input sanitization, security headers |
+| test_prompts.py | 22 | Constitutional directive auditing, prompt structure |
+| test_integration.py | 22 | Session lifecycle, domain detection, analytics flow |
+| test_graph_viz.py | 17 | Pipeline topology, witness nodes, routing paths |
+| **Total** | **172** | |
 
 ## Technical Decisions
 

@@ -2,6 +2,25 @@
 
 All notable changes to the Verdict project.
 
+## [1.1.0] — 2026-03-29
+
+### Added
+- **Security Middleware**: XSS pattern detection on URLs, HTML entity sanitization, Content-Length body size limits, and security response headers (X-Content-Type-Options, X-Frame-Options, X-XSS-Protection, Referrer-Policy)
+- **Centralized Prompt Templates**: All 7 agent prompts extracted to `agents/prompts.py` — single source of truth for constitutional directives with audit tests
+- **Session Analytics Endpoint**: `GET /sessions/analytics` aggregates ruling distribution, domain breakdown, format usage, completion rate, and average confidence
+- **Pipeline Graph Visualization**: Backend `graph_visualizer.py` generates structured pipeline topology with dynamic witness nodes; Frontend `PipelineGraph.jsx` renders vertical flow diagram with real-time status indicators
+- **Pipeline Graph Endpoints**: `GET /{id}/graph` (session-specific) and `GET /graph/topology` (static topology) for pipeline visualization
+- **Interactive Pipeline Sidebar**: Toggle pipeline view in courtroom UI showing agent execution flow with parallel branch display
+
+### Testing
+- 172 total tests across 14 test files (up from 106)
+- Added 22 security middleware tests (XSS detection, sanitization, headers)
+- Added 22 prompt template tests (constitutional directive verification)
+- Added 22 integration tests (session lifecycle, domain detection, analytics)
+- Added 17 graph visualization tests (topology, witness nodes, routing paths)
+
+---
+
 ## [1.0.0] — 2026-03-29
 
 ### Added
@@ -35,7 +54,7 @@ All notable changes to the Verdict project.
 - **Graceful Lifecycle**: Startup/shutdown handlers with structured logging
 
 ### Testing
-- 89 unit tests across 8 test files (schemas, graph topology, API contracts, exports, resilience, cache, middleware, domain config)
+- 106 unit tests across 10 test files (schemas, graph topology, API contracts, exports, resilience, cache, middleware, domain config, errors, metrics)
 - Shared test fixtures in conftest.py
 
 ### Deployment
