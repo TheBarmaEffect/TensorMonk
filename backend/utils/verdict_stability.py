@@ -340,3 +340,30 @@ def full_stability_analysis(
         "combined_robustness": combined,
         "verdict_is_robust": combined >= 0.7,
     }
+
+
+def verdict_summary(stability_result: dict) -> str:
+    """Generate a human-readable one-line summary of verdict stability.
+
+    Translates numerical stability metrics into actionable language
+    suitable for executive-level reports.
+
+    Args:
+        stability_result: Output from full_stability_analysis().
+
+    Returns:
+        One-line summary string.
+    """
+    robustness = stability_result.get("combined_robustness", 0)
+    is_robust = stability_result.get("verdict_is_robust", True)
+    margin = stability_result.get("evidence_margin", {})
+    classification = margin.get("classification", "unknown")
+    pivotal = stability_result.get("sensitivity", {}).get("pivotal_witnesses", [])
+
+    if is_robust and classification in ("decisive", "moderate"):
+        return f"Verdict is robust (robustness={robustness:.0%}, {classification} margin)"
+    elif is_robust:
+        return f"Verdict is stable but narrow (robustness={robustness:.0%}, {classification} margin)"
+    else:
+        pivot_note = f", {len(pivotal)} pivotal witness(es)" if pivotal else ""
+        return f"Verdict is FRAGILE (robustness={robustness:.0%}, {classification} margin{pivot_note}) — recommend additional review"
