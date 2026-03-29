@@ -1,3 +1,4 @@
+"""Pydantic v2 data models for the Verdict courtroom pipeline."""
 from .schemas import (
     Decision,
     Claim,
