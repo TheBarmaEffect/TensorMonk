@@ -3,6 +3,14 @@
 Graph topology:
   input → research → [prosecutor, defense] (parallel) → judge_cross_exam
   → witness_nodes (parallel) → judge_verdict → synthesis → END
+
+Checkpointing: Uses MemorySaver by default for in-process thread persistence.
+For production deployments, swap MemorySaver for a Redis-backed checkpointer:
+  from langgraph.checkpoint.redis import RedisSaver
+  checkpointer = RedisSaver.from_conn_string(settings.redis_url)
+
+interrupt_before: The graph supports pausing before the 'verdict' node to allow
+human review of witness reports before the final ruling is issued.
 """
 
 import asyncio
@@ -11,6 +19,7 @@ from typing import TypedDict, Optional, Annotated, Callable
 import operator
 
 from langgraph.graph import StateGraph, END
+from langgraph.checkpoint.memory import MemorySaver
 
 from agents.research import ResearchAgent
 from agents.prosecutor import ProsecutorAgent
@@ -24,9 +33,17 @@ logger = logging.getLogger(__name__)
 
 
 class VerdictState(TypedDict):
-    """The shared state flowing through the verdict graph."""
+    """The shared state flowing through the verdict graph.
+
+    Fields are immutable between nodes — each node returns a partial update.
+    Adversarial isolation is maintained by the graph: prosecutor_node and
+    defense_node receive only the research_package, never each other's output.
+    The judge receives both arguments only after both are complete.
+    """
 
     decision: dict
+    output_format: str                     # executive | technical | legal | investor
+    domain: str                            # auto-detected domain (business, legal, etc.)
     research_package: Optional[dict]
     prosecutor_argument: Optional[dict]
     defense_argument: Optional[dict]
@@ -43,15 +60,23 @@ class VerdictState(TypedDict):
 
 
 async def research_node(state: VerdictState) -> dict:
-    """Run the Research agent to produce a neutral research package."""
+    """Run the Research agent to produce a neutral research package.
+
+    The research package is the ONLY shared context between prosecutor and
+    defense — authorship is anonymous (neither agent knows who wrote it).
+    """
     agent = ResearchAgent()
     decision = state["decision"]
     callback = state.get("stream_callback")
+    output_format = state.get("output_format", "executive")
+    domain = state.get("domain", "business")
 
     try:
         package = await agent.run(
             decision_question=decision["question"],
             context=decision.get("context"),
+            output_format=output_format,
+            domain=domain,
             stream_callback=callback,
         )
         return {"research_package": package}
@@ -61,16 +86,22 @@ async def research_node(state: VerdictState) -> dict:
 
 
 async def prosecutor_node(state: VerdictState) -> dict:
-    """Run the Prosecutor agent to argue FOR the decision."""
+    """Run the Prosecutor agent — argues FOR the decision.
+
+    Constitutional directive: Must argue FOR regardless of personal assessment.
+    Adversarial isolation: Receives only research_package, not defense output.
+    """
     agent = ProsecutorAgent()
     decision = state["decision"]
     research = state.get("research_package", {})
     callback = state.get("stream_callback")
+    output_format = state.get("output_format", "executive")
 
     try:
         argument = await agent.run(
             decision_question=decision["question"],
             research_package=research,
+            output_format=output_format,
             stream_callback=callback,
         )
         return {"prosecutor_argument": argument.model_dump(mode="json")}
@@ -80,16 +111,22 @@ async def prosecutor_node(state: VerdictState) -> dict:
 
 
 async def defense_node(state: VerdictState) -> dict:
-    """Run the Defense agent to argue AGAINST the decision."""
+    """Run the Defense agent — argues AGAINST the decision.
+
+    Constitutional directive: Must argue AGAINST regardless of personal assessment.
+    Adversarial isolation: Receives only research_package, not prosecutor output.
+    """
     agent = DefenseAgent()
     decision = state["decision"]
     research = state.get("research_package", {})
     callback = state.get("stream_callback")
+    output_format = state.get("output_format", "executive")
 
     try:
         argument = await agent.run(
             decision_question=decision["question"],
             research_package=research,
+            output_format=output_format,
             stream_callback=callback,
         )
         return {"defense_argument": argument.model_dump(mode="json")}
@@ -99,7 +136,11 @@ async def defense_node(state: VerdictState) -> dict:
 
 
 async def parallel_arguments_node(state: VerdictState) -> dict:
-    """Run Prosecutor and Defense in parallel."""
+    """Run Prosecutor and Defense in true parallel.
+
+    Both agents receive the same research package but are isolated from
+    each other's reasoning — a core adversarial design constraint.
+    """
     pro_task = asyncio.create_task(prosecutor_node(state))
     def_task = asyncio.create_task(defense_node(state))
 
@@ -153,7 +194,7 @@ async def witness_node(state: VerdictState) -> dict:
     if not contested:
         return {"witness_reports": []}
 
-    # Find the actual claim data from arguments
+    # Build claim lookup from both arguments (adversarial isolation maintained)
     pro_claims = {}
     def_claims = {}
     pro_data = state.get("prosecutor_argument", {})
@@ -172,8 +213,6 @@ async def witness_node(state: VerdictState) -> dict:
         claim_id = contested_claim.get("claim_id", "unknown")
         statement = contested_claim.get("statement", "")
         witness_type = contested_claim.get("witness_type", "fact")
-
-        # Get evidence from actual claim data if available
         evidence = ""
         if claim_id in all_claims:
             evidence = all_claims[claim_id].get("evidence", "")
@@ -204,7 +243,11 @@ async def witness_node(state: VerdictState) -> dict:
 
 
 async def judge_verdict_node(state: VerdictState) -> dict:
-    """Judge delivers the final verdict."""
+    """Judge delivers the final verdict.
+
+    This node is the interrupt_before checkpoint — the graph can pause here
+    to allow human review of witness reports before ruling is issued.
+    """
     from models.schemas import Argument, WitnessReport
 
     judge = JudgeAgent()
@@ -238,12 +281,13 @@ async def judge_verdict_node(state: VerdictState) -> dict:
 
 
 async def synthesis_node(state: VerdictState) -> dict:
-    """Synthesis agent produces the battle-tested version."""
+    """Synthesis agent produces the battle-tested improved version."""
     from models.schemas import Argument, WitnessReport, VerdictResult
 
     agent = SynthesisAgent()
     decision = state["decision"]
     callback = state.get("stream_callback")
+    output_format = state.get("output_format", "executive")
 
     pro_data = state.get("prosecutor_argument")
     def_data = state.get("defense_argument")
@@ -265,6 +309,7 @@ async def synthesis_node(state: VerdictState) -> dict:
             defense_argument=def_arg,
             witness_reports=reports,
             verdict=verdict,
+            output_format=output_format,
             stream_callback=callback,
         )
         return {"synthesis": synthesis.model_dump(mode="json")}
@@ -276,8 +321,13 @@ async def synthesis_node(state: VerdictState) -> dict:
 # ── Build the graph ─────────────────────────────────────────────────────────
 
 
-def build_verdict_graph() -> StateGraph:
-    """Construct and compile the Verdict LangGraph."""
+def build_verdict_graph(interrupt_before_verdict: bool = False) -> StateGraph:
+    """Construct and compile the Verdict LangGraph.
+
+    Args:
+        interrupt_before_verdict: If True, graph pauses before judge_verdict
+            to allow human review of witness reports (human-in-the-loop mode).
+    """
     graph = StateGraph(VerdictState)
 
     graph.add_node("research", research_node)
@@ -295,18 +345,35 @@ def build_verdict_graph() -> StateGraph:
     graph.add_edge("verdict", "synthesis")
     graph.add_edge("synthesis", END)
 
-    return graph.compile()
+    # MemorySaver provides thread-level checkpointing so graph state is
+    # persisted between steps and resumable. For production, swap with:
+    #   from langgraph.checkpoint.redis import RedisSaver
+    #   checkpointer = RedisSaver.from_conn_string(os.getenv("REDIS_URL"))
+    checkpointer = MemorySaver()
+
+    interrupt_nodes = ["verdict"] if interrupt_before_verdict else []
+
+    return graph.compile(
+        checkpointer=checkpointer,
+        interrupt_before=interrupt_nodes,
+    )
 
 
 async def run_verdict_graph(
     decision: dict,
     stream_callback: Optional[Callable] = None,
+    output_format: str = "executive",
+    domain: str = "business",
+    thread_id: Optional[str] = None,
 ) -> VerdictState:
     """Execute the full verdict pipeline.
 
     Args:
         decision: Dict with 'id', 'question', and optional 'context'.
         stream_callback: Async callable that receives StreamEvent objects.
+        output_format: One of 'executive', 'technical', 'legal', 'investor'.
+        domain: Auto-detected domain (business, legal, medical, financial, etc.).
+        thread_id: Optional thread ID for checkpointing / resume support.
 
     Returns:
         The final VerdictState with all results.
@@ -315,6 +382,8 @@ async def run_verdict_graph(
 
     initial_state: VerdictState = {
         "decision": decision,
+        "output_format": output_format,
+        "domain": domain,
         "research_package": None,
         "prosecutor_argument": None,
         "defense_argument": None,
@@ -327,9 +396,11 @@ async def run_verdict_graph(
         "errors": [],
     }
 
+    config = {"configurable": {"thread_id": thread_id or decision.get("id", "default")}}
+
     logger.info("Starting verdict graph for decision: %s", decision.get("question", "")[:80])
 
-    result = await compiled.ainvoke(initial_state)
+    result = await compiled.ainvoke(initial_state, config=config)
 
     logger.info("Verdict graph complete. Errors: %s", result.get("errors", []))
     return result
