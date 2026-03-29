@@ -167,6 +167,19 @@ class DetectDomainResponse(BaseModel):
     reasoning: str
 
 
+@router.get("/domains")
+async def get_available_domains():
+    """Return all configured domain names with their suggested output formats."""
+    from config.domain_config import list_domains, get_suggested_format
+    return {
+        "domains": [
+            {"name": d, "suggested_format": get_suggested_format(d)}
+            for d in list_domains()
+        ],
+        "count": len(list_domains()),
+    }
+
+
 @router.post("/detect-domain", response_model=DetectDomainResponse)
 async def detect_domain(request: DetectDomainRequest):
     """Detect the decision domain and suggest the optimal output format.
