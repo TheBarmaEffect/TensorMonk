@@ -118,7 +118,7 @@ Build a **multi-agent adversarial AI courtroom** that takes any decision or idea
 | Structural cross-examination | ✅ | Judge receives argument graph critical paths + foundation claims for smarter claim selection |
 | Impact-weighted witness prioritization | ✅ | Contested claims reordered by DAG cascading impact before witness spawning |
 | Stability-aware synthesis | ✅ | Fragile verdicts trigger cautious recommendations with contingency plans |
-| 474 tests (unit + integration) | ✅ | 22 test files (pytest) |
+| 479 tests (unit + integration) | ✅ | 22 test files (pytest) |
 
 ### Pre-Committed Cut Rule
 > "Analytics charts are cut before the courtroom UI is degraded."
