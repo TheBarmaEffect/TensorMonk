@@ -124,6 +124,8 @@ def generate_markdown_report(session_data: dict) -> str:  # noqa: C901
             margin = stability.get("evidence_margin", "unknown")
             lines.append(f"\n### Verdict Stability")
             lines.append(f"- **Robustness Score:** {round(robustness * 100)}%")
+            from utils.verdict_stability import verdict_summary
+            lines.append(f"- **Summary:** {verdict_summary(stability)}")
             lines.append(f"- **Verdict Robust:** {'Yes' if is_robust else '⚠️ No — verdict may flip under evidence perturbation'}")
             lines.append(f"- **Evidence Margin:** {margin}")
             flip_rate = stability.get("flip_rate", 0)
