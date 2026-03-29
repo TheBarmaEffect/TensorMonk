@@ -171,3 +171,7 @@ class TestDOCXExport:
         assert len(docx) > 100
         # DOCX files start with PK (ZIP format)
         assert docx[:2] == b'PK'
+
+    def test_empty_session_returns_placeholder(self):
+        md = generate_markdown_report({})
+        assert "No Data Available" in md
