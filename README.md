@@ -150,7 +150,7 @@ User Input (question + context + output_format)
 - Platt scaling feedback loop: auto-fits calibration coefficients after 10+ witness records, then applies sigmoid correction to raw agent confidence in future verdicts
 - Cross-graph analysis: `CrossGraphAnalyzer` detects claims from opposing sides that reference the same underlying facts — classifies as contested territory, contradictory foundations, or foundation attacks
 - Structural entropy: Shannon entropy over degree distribution measures how evenly dependencies are distributed across claims — low entropy indicates fragile star topologies with high-impact central claims
-- Argument quality scoring: 5-dimension heuristic assessment (specificity, diversity, calibration, coherence, actionability) with A-D grading — flows through state to inform witness and synthesis behavior
+- Argument quality scoring: 6-dimension heuristic assessment (specificity, diversity, calibration, coherence, actionability) with A-D grading — flows through state to inform witness and synthesis behavior
 - Intelligence-driven routing: computed analysis (graph structure, quality scores, stability) persisted in VerdictState and used by downstream nodes for smarter cross-examination, impact-weighted witness prioritization, and stability-aware synthesis with contingency plans
 - Session lifecycle FSM: 5-state machine (created→running→complete/error/expired) with validated transitions wired into API routes
 - Domain-aware input validators: question quality scoring, research package completeness, format-domain compatibility — wired into API and pipeline

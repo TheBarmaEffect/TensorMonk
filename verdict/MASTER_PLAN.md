@@ -30,7 +30,7 @@ Build a **multi-agent adversarial AI courtroom** that takes any decision or idea
 ### 5. Analytical Pipeline Feedback (ADR-005)
 - Argument dependency graph: DAG construction with cascading impact analysis
 - Verdict stability: Monte Carlo perturbation testing (50 runs, ±10%)
-- Argument quality scoring: 5-dimension heuristic assessment with A-D grading
+- Argument quality scoring: 6-dimension heuristic assessment with A-D grading
 - Confidence calibration: binned ECE + Platt scaling + isotonic regression (PAVA) per agent per domain
 
 ### 6. Intelligence-Driven Routing (ADR-006)
@@ -106,7 +106,7 @@ Build a **multi-agent adversarial AI courtroom** that takes any decision or idea
 | Constitutional compliance validation | ✅ | `_validate_constitutional_compliance()` directive enforcement |
 | Argument dependency graph (DAG) | ✅ | `utils/argument_graph.py` — BFS cascading impact, coherence scoring |
 | Verdict stability perturbation analysis | ✅ | `utils/verdict_stability.py` — 50-run Monte Carlo, evidence margin |
-| Argument quality scoring (A-D grades) | ✅ | `utils/argument_quality.py` — 5-dimension heuristic assessment |
+| Argument quality scoring (A-D grades) | ✅ | `utils/argument_quality.py` — 6-dimension heuristic assessment |
 | Inline analysis in session results | ✅ | `run_pipeline()` computes quality/stability/graph and embeds in result |
 | Intelligence-driven routing | ✅ | Computed analysis flows through VerdictState to influence cross-exam, witness priority, and synthesis |
 | Leave-one-out sensitivity analysis | ✅ | `sensitivity_analysis()` identifies pivotal witnesses, computes fragility score |
