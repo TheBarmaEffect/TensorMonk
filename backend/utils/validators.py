@@ -156,3 +156,41 @@ def is_valid_domain(domain: str) -> bool:
         True if the domain is in the recognized set.
     """
     return domain.lower().strip() in VALID_DOMAINS
+
+
+def closest_valid_domain(domain: str) -> Optional[str]:
+    """Find the closest valid domain using Levenshtein edit distance.
+
+    Useful for typo correction when users manually specify a domain.
+
+    Args:
+        domain: Potentially misspelled domain string.
+
+    Returns:
+        Closest valid domain if edit distance ≤ 3, else None.
+    """
+    target = domain.lower().strip()
+    if target in VALID_DOMAINS:
+        return target
+
+    def _edit_distance(a: str, b: str) -> int:
+        """Compute Levenshtein distance between two strings."""
+        if len(a) < len(b):
+            return _edit_distance(b, a)
+        prev = list(range(len(b) + 1))
+        for i, ca in enumerate(a):
+            curr = [i + 1]
+            for j, cb in enumerate(b):
+                curr.append(min(prev[j + 1] + 1, curr[j] + 1, prev[j] + (ca != cb)))
+            prev = curr
+        return prev[len(b)]
+
+    best_match = None
+    best_dist = 4  # threshold
+    for valid in VALID_DOMAINS:
+        dist = _edit_distance(target, valid)
+        if dist < best_dist:
+            best_dist = dist
+            best_match = valid
+
+    return best_match
