@@ -89,21 +89,50 @@ User Input (question + context + output_format)
 | PDF generation | fpdf2 |
 | Containerization | Docker + docker-compose |
 
-## Features
+## What's Built and Working
 
-- Six specialized AI agents with constitutional directives and adversarial isolation
-- Real-time WebSocket streaming of agent reasoning as it happens
-- Domain detection — auto-classifies decisions (business, financial, legal, hiring, etc.)
-- Output format selector — executive, technical, legal, or investor perspectives
-- Animated courtroom UI with speech-bubble debate (prosecutor LEFT, defense RIGHT)
-- Analytics sidebar with Recharts BarChart (claim confidence) and RadarChart (argument comparison)
-- Verdict card with typewriter-animated ruling and gavel sound effect
-- Synthesis card with battle-tested improved version of the original idea
-- Follow-up questions: context-aware Q&A powered by the same LLM
-- Export: Markdown, PDF (via fpdf2), and JSON
-- Session history panel
-- Voice input via Web Speech API
-- LangGraph checkpointing with thread-level persistence
+**Core Pipeline (fully functional)**
+- 6 AI agents: Research, Prosecutor, Defense, Judge, up to 3 Witnesses, Synthesis
+- Constitutional isolation — Prosecutor and Defense share zero memory
+- Authorship blindness — Judge receives arguments with agent identity stripped via `strip_authorship()`
+- Dynamic Witness spawning — Judge spawns FactWitness, DataWitness, PrecedentWitness based on contested claims via LangGraph conditional edges
+- Domain detection — auto-classifies startup / legal / medical / financial / technical / hiring
+- Domain-aware constitutional overlays loaded from `backend/config/domains.yaml` at runtime
+- Few-shot synthesis anchors per domain (e.g., "Week 1-2: Implement WorkOS for enterprise SSO")
+- Parallel Prosecutor + Defense execution via `asyncio.gather`
+- LangGraph StateGraph with `MemorySaver` checkpointing (`AsyncRedisSaver` when `REDIS_URL` set)
+- Confidence-based routing: 3 verdict paths (normal, low-confidence review, hallucination guard at `temperature=0.3`)
+- Hallucination guard — agent outputs validated against Pydantic v2 schemas, malformed JSON triggers `temperature=0.3` retry
+- Real-time WebSocket streaming with typed `StreamEvent` objects
+- Export: Markdown, PDF (via fpdf2), and structured JSON
+- Follow-up questions: context-aware Q&A against session results via `/api/verdict/{id}/followup`
+- Session history panel with `/api/verdict/sessions/history` endpoint
+
+**Frontend (fully functional)**
+- Sequential ACT-based courtroom UI (5 Acts: Investigation, Debate, Cross-Examination, Ruling, Synthesis)
+- Speech-bubble debate layout (Prosecutor LEFT, Defense RIGHT)
+- Live agent status indicators with active/complete states
+- Verdict card with typewriter-animated ruling
+- Synthesis card with battle-tested improved version
+- Warm judicial design system (Cormorant Garamond headings, liquid glass cards)
+- Framer Motion ACT transitions and staggered reveal animations
+- Output format selector (Executive, Technical, Legal, Investor)
+- Domain badge auto-detected as user types
+
+**Deployment**
+- Docker + docker-compose with Redis service
+- Railway config (`railway.toml` + `Procfile`) ready for `railway up`
+
+## Scope-Trimmed (time constraints — Tier 2)
+
+The following were planned but cut per the pre-committed Tier 2 cut rule
+(analytics panel cut if courtroom UI not polished by midnight):
+
+- Recharts analytics panel (confidence evolution chart, argument radar) — component exists but not wired to live data
+- Verdict history persistence across server restarts (in-memory only)
+- Voice input via Web Speech API — mic button exists but browser support varies
+- Verdict sharing URL
+- DOCX export
 
 ## Quick Start
 
