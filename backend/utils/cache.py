@@ -33,6 +33,8 @@ class TTLCache:
         self._store: dict[str, tuple[float, Any]] = {}
         self._hits = 0
         self._misses = 0
+        self._evictions = 0
+        self._expirations = 0
 
     @staticmethod
     def _normalize_key(key: str) -> str:
@@ -67,6 +69,7 @@ class TTLCache:
             # Expired — remove and return None
             del self._store[normalized]
             self._misses += 1
+            self._expirations += 1
             return None
 
         self._hits += 1
@@ -85,6 +88,7 @@ class TTLCache:
         if len(self._store) >= self.max_entries:
             oldest_key = min(self._store, key=lambda k: self._store[k][0])
             del self._store[oldest_key]
+            self._evictions += 1
 
         normalized = self._normalize_key(key)
         self._store[normalized] = (time.monotonic(), value)
@@ -102,4 +106,6 @@ class TTLCache:
             "misses": self._misses,
             "hit_rate": round(self._hits / total, 3) if total > 0 else 0.0,
             "size": len(self._store),
+            "evictions": self._evictions,
+            "expirations": self._expirations,
         }
