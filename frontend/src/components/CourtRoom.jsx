@@ -4,6 +4,7 @@ import VerdictCard from './VerdictCard'
 import SynthesisCard from './SynthesisCard'
 import FollowUp from './FollowUp'
 import AnalyticsPanel from './AnalyticsPanel'
+import ComparisonMode from './ComparisonMode'
 import useVerdictStore from '../store/verdictStore'
 
 /* ─── Safe parse helper ─── */
@@ -189,6 +190,7 @@ export default function CourtRoom() {
   const reset = useVerdictStore(s => s.reset)
   const feedRef = useRef(null)
   const [showAnalytics, setShowAnalytics] = useState(false)
+  const [showComparison, setShowComparison] = useState(false)
   const [visibleBubbles, setVisibleBubbles] = useState(0)
   const isComplete = !!(verdict && synthesis)
 
@@ -235,10 +237,16 @@ export default function CourtRoom() {
         </div>
         <div className="flex items-center gap-3">
           {isComplete && (
-            <button onClick={() => setShowAnalytics(!showAnalytics)}
-              className={`px-3 py-1 rounded-md text-[11px] font-medium transition ${showAnalytics ? 'bg-[var(--bg-elevated)] text-[var(--text-primary)]' : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)]'}`}>
-              📊 Analytics
-            </button>
+            <>
+              <button onClick={() => { setShowComparison(!showComparison); if (showAnalytics) setShowAnalytics(false) }}
+                className={`px-3 py-1 rounded-md text-[11px] font-medium transition ${showComparison ? 'bg-[var(--bg-elevated)] text-[var(--text-primary)]' : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)]'}`}>
+                ⚖️ Compare
+              </button>
+              <button onClick={() => { setShowAnalytics(!showAnalytics); if (showComparison) setShowComparison(false) }}
+                className={`px-3 py-1 rounded-md text-[11px] font-medium transition ${showAnalytics ? 'bg-[var(--bg-elevated)] text-[var(--text-primary)]' : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)]'}`}>
+                📊 Analytics
+              </button>
+            </>
           )}
           <Timer startTime={startTime} />
           <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/15">
@@ -466,7 +474,7 @@ export default function CourtRoom() {
           </div>
         </div>
 
-        {/* Analytics sidebar */}
+        {/* Sidebar panels — Analytics or Comparison */}
         <AnimatePresence>
           {showAnalytics && (
             <motion.div
@@ -484,6 +492,31 @@ export default function CourtRoom() {
                   </button>
                 </div>
                 <AnalyticsPanel agentStates={agentStates} verdict={verdict} synthesis={synthesis} />
+              </div>
+            </motion.div>
+          )}
+          {showComparison && (
+            <motion.div
+              initial={{ width: 0, opacity: 0 }}
+              animate={{ width: 520, opacity: 1 }}
+              exit={{ width: 0, opacity: 0 }}
+              transition={{ duration: 0.35 }}
+              className="flex-shrink-0 border-l border-[var(--border)] bg-[var(--bg-secondary)] overflow-hidden overflow-y-auto"
+            >
+              <div className="w-[520px]">
+                <div className="px-4 py-3 border-b border-[var(--border)] flex items-center justify-between">
+                  <span className="text-[12px] font-medium text-[var(--text-primary)]">⚖️ Prosecution vs Defense — Side-by-Side</span>
+                  <button onClick={() => setShowComparison(false)} className="text-[var(--text-muted)] hover:text-[var(--text-primary)] transition">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12" /></svg>
+                  </button>
+                </div>
+                <div className="p-4">
+                  <ComparisonMode
+                    prosecutor={agentStates.prosecutor.output}
+                    defense={agentStates.defense.output}
+                    witnesses={agentStates.witnesses}
+                  />
+                </div>
               </div>
             </motion.div>
           )}
