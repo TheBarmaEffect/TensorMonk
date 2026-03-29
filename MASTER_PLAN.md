@@ -21,6 +21,17 @@ Build a **multi-agent adversarial AI courtroom** that takes any decision or idea
 - Per-domain constitutional overlays, evidence hierarchies, synthesis anchors
 - 6+ domains: business, financial, legal, medical, technology, hiring
 
+### 4. Event-Driven Observability (ADR-004)
+- Async event bus with topic-based pub/sub and priority ordering
+- All graph nodes emit start/complete/error events with rich payloads
+- Fire-and-forget delivery for zero-overhead pipeline instrumentation
+
+### 5. Analytical Pipeline Feedback (ADR-005)
+- Argument dependency graph: DAG construction with cascading impact analysis
+- Verdict stability: Monte Carlo perturbation testing (50 runs, ±10%)
+- Argument quality scoring: 5-dimension heuristic assessment with A-D grading
+- Confidence calibration: Bayesian ECE tracking per agent per domain
+
 ## Delivery Tiers
 
 ### Tier 1 — Core Courtroom (COMPLETE)
