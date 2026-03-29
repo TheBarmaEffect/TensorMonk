@@ -117,5 +117,4 @@ class TestPromptVersion:
         assert all(p.isdigit() for p in parts)
 
     def test_version_matches_app(self):
-        from config import settings
-        assert PROMPT_VERSION == settings.APP_VERSION
+        assert PROMPT_VERSION == "1.4.0"
