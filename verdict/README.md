@@ -10,128 +10,146 @@
 
 **Multi-agent adversarial AI courtroom for decision evaluation.**
 
-Verdict transforms any startup or product decision into a live AI courtroom proceeding. Specialized agents debate, challenge each other, verify claims, and produce a final verdict — then synthesize a stronger, battle-tested version of the original idea.
-
-Every decision deserves a challenger.
+Submit any decision or idea and Verdict runs it through a full AI courtroom proceeding: specialized agents research, argue for and against, cross-examine witnesses, deliver a ruling, and synthesize a battle-tested version of the original idea -- all streamed to the browser in real time over WebSocket.
 
 ---
 
 ## Architecture
 
 ```
-User Input
+User Input (question + optional context)
     |
     v
-[Research Agent] ── neutral research package
+[Research Agent] ── produces neutral research package
     |
-    +──────────+──────────+
-    |                     |
-    v                     v
-[Prosecutor]        [Defense]
-  argues FOR         argues AGAINST
-    |                     |
-    +──────────+──────────+
-               |
-               v
-         [Judge Agent]
-         cross-examines
-               |
-    +----------+----------+
-    |          |          |
-    v          v          v
-[Witness]  [Witness]  [Witness]
-  fact       data     precedent
-    |          |          |
-    +----------+----------+
-               |
-               v
-         [Judge Agent]
-         delivers verdict
-               |
-               v
-       [Synthesis Agent]
-       battle-tested output
-               |
-               v
-        WebSocket Stream → Frontend
+    +──────────────+──────────────+
+    |                             |
+    v                             v
+[Prosecutor Agent]         [Defense Agent]
+  argues FOR                argues AGAINST
+    |                             |
+    +──────────────+──────────────+
+                   |
+                   v
+            [Judge Agent]
+            cross-examines
+                   |
+       +-----------+-----------+
+       |           |           |
+       v           v           v
+   [Witness]   [Witness]   [Witness]
+    fact         data       precedent
+       |           |           |
+       +-----------+-----------+
+                   |
+                   v
+            [Judge Agent]
+            delivers verdict
+                   |
+                   v
+          [Synthesis Agent]
+          battle-tested output
+                   |
+                   v
+           WebSocket Stream --> React Frontend
 ```
 
-## Agent Roles
+## Tech Stack
 
-| Agent | Role | Directive |
-|-------|------|-----------|
-| Research | Neutral analyst | Produces factual research package shared by both sides |
-| Prosecutor | Argues FOR | Constitutional directive to build strongest case for the decision |
-| Defense | Argues AGAINST | Constitutional directive to build strongest case against the decision |
-| Judge | Arbitrator | Cross-examines, spawns witnesses, delivers final ruling |
-| Witness (x3) | Verifiers | Fact, Data, and Precedent specialists verify contested claims |
-| Synthesis | Architect | Reads full proceeding, produces improved battle-tested version |
+| Layer | Technology |
+|-------|------------|
+| Backend framework | FastAPI |
+| Agent orchestration | LangGraph |
+| LLM inference | Groq (Llama 3.3 70B Versatile) |
+| Data models | Pydantic v2 |
+| Real-time streaming | WebSocket (native FastAPI) |
+| Frontend framework | React 18 |
+| Build tool | Vite |
+| Styling | Tailwind CSS |
+| Animations | Framer Motion |
+| State management | Zustand |
+| Charts | Recharts |
+| Icons | Lucide React |
+| Containerization | Docker |
+
+## Features
+
+- Six specialized AI agents (Research, Prosecutor, Defense, Judge, Witnesses, Synthesis)
+- Real-time WebSocket streaming of agent reasoning as it happens
+- Animated courtroom UI with agent graph visualization
+- Analytics panel with scoring charts (Recharts)
+- Verdict card with ruling, confidence score, and reasoning
+- Synthesis card with battle-tested improved version of the idea
+- Follow-up questions: ask the AI about the verdict after the trial completes
+- Export results as Markdown or JSON
+- Session history panel
+- Demo mode with pre-cached data (no API key required)
+- Voice input via browser microphone
 
 ## Quick Start
 
 ### Prerequisites
-- Docker & Docker Compose
-- Groq API key (free at console.groq.com)
 
-### Run with Docker
+- Python 3.12+
+- Node.js 20+
+- A Groq API key (free at [console.groq.com](https://console.groq.com))
+
+### Backend
 
 ```bash
-# Clone the repository
-git clone https://github.com/your-team/verdict.git
-cd verdict
+cd backend
+python -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
 
-# Set your Groq API key
+# Create .env with your API key
 echo "GROQ_API_KEY=your-key-here" > .env
 
-# Start everything
-docker-compose up --build
-```
-
-Frontend: http://localhost:5173
-Backend: http://localhost:8000
-Health check: http://localhost:8000/health
-
-### Run in Demo Mode (no API key needed)
-
-```bash
-echo "DEMO_MODE=true" >> .env
-docker-compose up --build
-```
-
-### Development (without Docker)
-
-```bash
-# Backend
-cd backend
-pip install -r requirements.txt
-cp .env.example .env  # Edit with your GROQ_API_KEY
+# Run the server
 uvicorn main:app --reload
+```
 
-# Frontend (separate terminal)
+Backend runs at http://localhost:8000
+
+### Frontend
+
+```bash
 cd frontend
 npm install
 npm run dev
 ```
 
-## Environment Variables
+Frontend runs at http://localhost:5173
 
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `GROQ_API_KEY` | Yes* | — | Groq API key for LLM inference |
-| `REDIS_URL` | No | `redis://localhost:6379` | Redis connection URL |
-| `DEMO_MODE` | No | `false` | Use pre-cached demo data |
-| `LOG_LEVEL` | No | `INFO` | Python logging level |
+### Docker
 
-*Not required when `DEMO_MODE=true`
+```bash
+# Set your API key in backend/.env
+echo "GROQ_API_KEY=your-key-here" > backend/.env
+
+# Start both services
+docker-compose up --build
+```
+
+### Demo Mode (no API key needed)
+
+```bash
+echo "DEMO_MODE=true" > backend/.env
+docker-compose up --build
+```
 
 ## API Endpoints
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | `POST` | `/api/verdict/start` | Submit a decision, returns `session_id` |
+| `GET` | `/api/verdict/sessions/history` | List all sessions |
 | `GET` | `/api/verdict/{id}/status` | Get session status |
 | `GET` | `/api/verdict/{id}/result` | Get complete result JSON |
 | `WS` | `/api/verdict/{id}/stream` | Real-time agent event stream |
+| `GET` | `/api/verdict/{id}/export/markdown` | Export result as Markdown |
+| `GET` | `/api/verdict/{id}/export/json` | Export result as JSON |
+| `POST` | `/api/verdict/{id}/followup` | Ask a follow-up question |
 | `GET` | `/health` | Health check |
 
 ### POST /api/verdict/start
@@ -143,42 +161,30 @@ npm run dev
 }
 ```
 
-Response:
-```json
-{
-  "session_id": "uuid",
-  "decision": { "id": "uuid", "question": "..." },
-  "status": "created"
-}
-```
-
 ### WebSocket Events
 
 Connect to `ws://localhost:8000/api/verdict/{session_id}/stream` to receive real-time events:
 
-```json
-{
-  "event_type": "prosecutor_thinking",
-  "agent": "prosecutor",
-  "content": "Building the case FOR...",
-  "data": null,
-  "timestamp": "2026-03-28T12:00:00Z"
-}
-```
+Event types: `research_start`, `research_complete`, `prosecutor_thinking`, `prosecutor_complete`, `defense_thinking`, `defense_complete`, `judge_start`, `witness_spawned`, `witness_complete`, `cross_examination_complete`, `verdict_start`, `verdict_complete`, `synthesis_start`, `synthesis_complete`, `pipeline_complete`, `error`
 
-Event types: `research_start`, `research_complete`, `prosecutor_thinking`, `prosecutor_complete`, `defense_thinking`, `defense_complete`, `judge_start`, `witness_spawned`, `witness_complete`, `cross_examination_complete`, `verdict_start`, `verdict_complete`, `synthesis_start`, `synthesis_complete`, `error`
+## Environment Variables
 
-## Tech Stack
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `GROQ_API_KEY` | Yes* | -- | Groq API key for LLM inference |
+| `DEMO_MODE` | No | `false` | Use pre-cached demo data |
+| `LOG_LEVEL` | No | `INFO` | Python logging level |
+| `CORS_ORIGINS` | No | localhost origins | Allowed CORS origins |
 
-- **Backend**: FastAPI, LangGraph, Groq (Llama 3.3 70B), Pydantic v2, Redis
-- **Frontend**: React 18, Vite, Tailwind CSS, Framer Motion, Zustand, WebSocket
-- **Deployment**: Docker, Railway
-- **LLM**: Groq inference (llama-3.3-70b-versatile)
+*Not required when `DEMO_MODE=true`
 
-## Team
+## Screenshots
 
-**Tensor Monk** — New England Inter-Collegiate AI Hackathon 2026
+![Landing page](docs/screenshots/landing.png)
+![Courtroom in progress](docs/screenshots/courtroom.png)
+![Verdict card](docs/screenshots/verdict.png)
+![Analytics panel](docs/screenshots/analytics.png)
 
 ---
 
-*Verdict. Every decision deserves a challenger.*
+*Verdict -- every decision deserves a challenger.*

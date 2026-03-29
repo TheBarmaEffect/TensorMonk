@@ -1,0 +1,119 @@
+"""Export service for generating verdict reports."""
+
+import io
+import json
+from datetime import datetime
+
+
+def generate_markdown_report(session_data: dict) -> str:
+    """Generate a comprehensive markdown report from session data."""
+    decision = session_data.get("decision", {})
+    research = session_data.get("research_package", {})
+    prosecutor = session_data.get("prosecutor_argument", {})
+    defense = session_data.get("defense_argument", {})
+    witnesses = session_data.get("witness_reports", [])
+    verdict = session_data.get("verdict", {})
+    synthesis = session_data.get("synthesis", {})
+
+    lines = []
+    lines.append("# VERDICT — AI Courtroom Analysis Report")
+    lines.append(f"\n**Decision:** {decision.get('question', 'N/A')}")
+    lines.append(f"**Date:** {datetime.utcnow().strftime('%B %d, %Y')}")
+    lines.append(f"**Session ID:** {decision.get('id', 'N/A')}")
+    lines.append("\n---\n")
+
+    # Research
+    lines.append("## 1. Research Analysis")
+    if research:
+        if research.get("summary"):
+            lines.append(f"\n{research['summary']}\n")
+        if research.get("key_data_points"):
+            lines.append("### Key Data Points")
+            for point in research["key_data_points"]:
+                lines.append(f"- {point}")
+        if research.get("risk_landscape"):
+            lines.append("\n### Risk Landscape")
+            for risk in research["risk_landscape"]:
+                lines.append(f"- {risk}")
+
+    lines.append("\n---\n")
+
+    # Prosecution
+    lines.append("## 2. Prosecution Arguments (FOR)")
+    if prosecutor:
+        if prosecutor.get("opening"):
+            lines.append(f"\n> {prosecutor['opening']}\n")
+        if prosecutor.get("claims"):
+            for i, claim in enumerate(prosecutor["claims"], 1):
+                lines.append(f"### Claim {i}")
+                lines.append(f"**Statement:** {claim.get('statement', '')}")
+                lines.append(f"**Evidence:** {claim.get('evidence', '')}")
+                lines.append(f"**Confidence:** {round(claim.get('confidence', 0.5) * 100)}%\n")
+        lines.append(f"**Overall Confidence:** {round(prosecutor.get('confidence', 0.5) * 100)}%")
+
+    lines.append("\n---\n")
+
+    # Defense
+    lines.append("## 3. Defense Arguments (AGAINST)")
+    if defense:
+        if defense.get("opening"):
+            lines.append(f"\n> {defense['opening']}\n")
+        if defense.get("claims"):
+            for i, claim in enumerate(defense["claims"], 1):
+                lines.append(f"### Claim {i}")
+                lines.append(f"**Statement:** {claim.get('statement', '')}")
+                lines.append(f"**Evidence:** {claim.get('evidence', '')}")
+                lines.append(f"**Confidence:** {round(claim.get('confidence', 0.5) * 100)}%\n")
+        lines.append(f"**Overall Confidence:** {round(defense.get('confidence', 0.5) * 100)}%")
+
+    lines.append("\n---\n")
+
+    # Witnesses
+    if witnesses:
+        lines.append("## 4. Witness Reports")
+        for i, w in enumerate(witnesses, 1):
+            verdict_emoji = "✅" if w.get("verdict_on_claim") == "sustained" else "❌" if w.get("verdict_on_claim") == "overruled" else "⚠️"
+            lines.append(f"\n### Witness {i} ({w.get('witness_type', 'fact').title()}) {verdict_emoji}")
+            lines.append(f"**Verdict:** {w.get('verdict_on_claim', 'inconclusive').upper()}")
+            lines.append(f"**Resolution:** {w.get('resolution', '')}")
+            lines.append(f"**Confidence:** {round(w.get('confidence', 0.5) * 100)}%")
+        lines.append("\n---\n")
+
+    # Verdict
+    lines.append("## 5. Final Verdict")
+    if verdict:
+        ruling = verdict.get("ruling", "conditional").upper()
+        lines.append(f"\n### Ruling: {ruling}")
+        lines.append(f"**Confidence:** {round(verdict.get('confidence', 0.5) * 100)}%\n")
+        lines.append(f"{verdict.get('reasoning', '')}\n")
+        if verdict.get("key_factors"):
+            lines.append("### Key Factors")
+            for i, factor in enumerate(verdict["key_factors"], 1):
+                lines.append(f"{i}. {factor}")
+
+    lines.append("\n---\n")
+
+    # Synthesis
+    lines.append("## 6. Battle-Tested Synthesis")
+    if synthesis:
+        lines.append(f"\n**Strength Score:** {round(synthesis.get('strength_score', 0.7) * 100)}%\n")
+        if synthesis.get("improved_idea"):
+            lines.append(synthesis["improved_idea"])
+        if synthesis.get("addressed_objections"):
+            lines.append("\n### Objections Addressed")
+            for obj in synthesis["addressed_objections"]:
+                lines.append(f"- ✓ {obj}")
+        if synthesis.get("recommended_actions"):
+            lines.append("\n### Recommended Actions")
+            for i, action in enumerate(synthesis["recommended_actions"], 1):
+                lines.append(f"{i}. {action}")
+
+    lines.append("\n\n---")
+    lines.append("*Generated by Verdict AI Courtroom*")
+
+    return "\n".join(lines)
+
+
+def generate_json_report(session_data: dict) -> str:
+    """Generate a JSON export of the full session data."""
+    return json.dumps(session_data, indent=2, default=str)

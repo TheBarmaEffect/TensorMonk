@@ -112,19 +112,28 @@ class JudgeAgent:
         ]
 
         try:
-            full_response = ""
-            async for chunk in self.llm.astream(messages):
-                token = chunk.content
-                if token:
-                    full_response += token
-                    if stream_callback:
-                        await stream_callback(
-                            StreamEvent(
-                                event_type="judge_start",
-                                agent="judge",
-                                content=token,
-                            )
+            thinking_phases = [
+                "Reviewing prosecution's opening statement and claims...",
+                "Reviewing defense's opening statement and claims...",
+                "Comparing conflicting evidence from both sides...",
+                "Identifying the most contested factual claims...",
+                "Selecting claims for witness verification...",
+            ]
+
+            for phase in thinking_phases:
+                if stream_callback:
+                    await stream_callback(
+                        StreamEvent(
+                            event_type="judge_start",
+                            agent="judge",
+                            content=phase + "\n",
                         )
+                    )
+                    import asyncio
+                    await asyncio.sleep(0.3)
+
+            response = await self.llm.ainvoke(messages)
+            full_response = response.content
 
             result = self._parse_json(full_response)
             contested = result.get("contested_claims", [])
@@ -195,19 +204,28 @@ class JudgeAgent:
         ]
 
         try:
-            full_response = ""
-            async for chunk in self.llm.astream(messages):
-                token = chunk.content
-                if token:
-                    full_response += token
-                    if stream_callback:
-                        await stream_callback(
-                            StreamEvent(
-                                event_type="verdict_start",
-                                agent="judge",
-                                content=token,
-                            )
+            thinking_phases = [
+                "Weighing prosecution arguments against evidence...",
+                "Weighing defense arguments against evidence...",
+                "Reviewing witness verification reports...",
+                "Assessing overall weight of evidence...",
+                "Formulating final ruling...",
+            ]
+
+            for phase in thinking_phases:
+                if stream_callback:
+                    await stream_callback(
+                        StreamEvent(
+                            event_type="verdict_start",
+                            agent="judge",
+                            content=phase + "\n",
                         )
+                    )
+                    import asyncio
+                    await asyncio.sleep(0.4)
+
+            response = await self.llm.ainvoke(messages)
+            full_response = response.content
 
             data = self._parse_json(full_response)
 

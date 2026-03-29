@@ -7,14 +7,12 @@ import os
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
 
-    groq_api_key: str = "REDACTED_GROQ_KEY"
-    redis_url: str = "redis://localhost:6379"
+    groq_api_key: str = ""  # Set via GROQ_API_KEY env var
     cors_origins: list[str] = [
         "http://localhost:5173",
         "http://localhost:3000",
         "https://verdict.up.railway.app",
     ]
-    demo_mode: bool = False
     log_level: str = "INFO"
 
     class Config:

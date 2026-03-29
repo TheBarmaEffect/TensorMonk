@@ -98,13 +98,13 @@ export default function useVerdict() {
   )
 
   const submit = useCallback(
-    async (question, context) => {
+    async (question, context, format = 'executive') => {
       try {
         // Create session via REST
         const res = await fetch(`${API_BASE}/start`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ question, context }),
+          body: JSON.stringify({ question, context, output_format: format }),
         })
 
         if (!res.ok) {

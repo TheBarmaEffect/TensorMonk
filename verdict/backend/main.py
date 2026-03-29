@@ -39,7 +39,6 @@ async def health():
     """Health check endpoint."""
     return {
         "status": "alive",
-        "demo_mode": settings.demo_mode,
         "version": "1.0.0",
     }
 

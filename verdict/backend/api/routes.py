@@ -8,8 +8,10 @@ from datetime import datetime
 from typing import Optional
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, HTTPException
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, PlainTextResponse
 from pydantic import BaseModel
+
+from services.export_service import generate_markdown_report, generate_json_report
 
 from config import settings
 from models.schemas import Decision, StreamEvent
@@ -18,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/verdict")
 
-# In-memory session store (Redis upgrade path exists but not required for hackathon)
+# In-memory session store
 sessions: dict[str, dict] = {}
 
 
@@ -62,6 +64,21 @@ async def start_verdict(request: StartRequest):
         decision=decision.model_dump(mode="json"),
         status="created",
     )
+
+
+@router.get("/sessions/history")
+async def get_history():
+    """Get all verdict sessions for the history panel."""
+    history = []
+    for sid, session in sessions.items():
+        history.append({
+            "session_id": sid,
+            "question": session["decision"].get("question", ""),
+            "status": session["status"],
+            "created_at": session.get("created_at"),
+            "ruling": session.get("result", {}).get("verdict", {}).get("ruling") if session.get("result") else None,
+        })
+    return {"sessions": sorted(history, key=lambda x: x.get("created_at", ""), reverse=True)}
 
 
 @router.get("/{session_id}/status")
@@ -122,27 +139,24 @@ async def stream_verdict(websocket: WebSocket, session_id: str):
         await event_queue.put(event_dict)
 
     async def run_pipeline():
-        """Execute the verdict graph or demo data."""
+        """Execute the multi-agent verdict pipeline."""
         try:
-            if settings.demo_mode:
-                await _run_demo_pipeline(stream_callback, session)
-            else:
-                from graph.verdict_graph import run_verdict_graph
+            from graph.verdict_graph import run_verdict_graph
 
-                result = await run_verdict_graph(
-                    decision=session["decision"],
-                    stream_callback=stream_callback,
-                )
-                session["result"] = {
-                    "decision": session["decision"],
-                    "research_package": result.get("research_package"),
-                    "prosecutor_argument": result.get("prosecutor_argument"),
-                    "defense_argument": result.get("defense_argument"),
-                    "witness_reports": result.get("witness_reports"),
-                    "verdict": result.get("verdict"),
-                    "synthesis": result.get("synthesis"),
-                    "errors": result.get("errors", []),
-                }
+            result = await run_verdict_graph(
+                decision=session["decision"],
+                stream_callback=stream_callback,
+            )
+            session["result"] = {
+                "decision": session["decision"],
+                "research_package": result.get("research_package"),
+                "prosecutor_argument": result.get("prosecutor_argument"),
+                "defense_argument": result.get("defense_argument"),
+                "witness_reports": result.get("witness_reports"),
+                "verdict": result.get("verdict"),
+                "synthesis": result.get("synthesis"),
+                "errors": result.get("errors", []),
+            }
 
             session["status"] = "complete"
         except Exception as e:
@@ -188,43 +202,87 @@ async def stream_verdict(websocket: WebSocket, session_id: str):
             pass
 
 
-async def _run_demo_pipeline(stream_callback, session: dict):
-    """Replay pre-cached demo data with realistic streaming delays."""
-    from demo_data import (
-        DEMO_STREAM_EVENTS,
-        DEMO_RESEARCH_PACKAGE,
-        DEMO_PROSECUTOR_ARGUMENT,
-        DEMO_DEFENSE_ARGUMENT,
-        DEMO_WITNESS_REPORTS,
-        DEMO_VERDICT,
-        DEMO_SYNTHESIS,
+# ---------------------------------------------------------------------------
+# Export & follow-up endpoints
+# ---------------------------------------------------------------------------
+
+
+@router.get("/{session_id}/export/markdown")
+async def export_markdown(session_id: str):
+    """Export the verdict session as a markdown report."""
+    session = sessions.get(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if not session.get("result"):
+        raise HTTPException(status_code=202, detail="Session not complete")
+
+    report = generate_markdown_report(session["result"])
+    return PlainTextResponse(content=report, media_type="text/markdown")
+
+
+@router.get("/{session_id}/export/json")
+async def export_json(session_id: str):
+    """Export the verdict session as JSON."""
+    session = sessions.get(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if not session.get("result"):
+        raise HTTPException(status_code=202, detail="Session not complete")
+
+    report = generate_json_report(session["result"])
+    return PlainTextResponse(content=report, media_type="application/json")
+
+
+class FollowUpRequest(BaseModel):
+    question: str
+
+
+@router.post("/{session_id}/followup")
+async def followup_question(session_id: str, request: FollowUpRequest):
+    """Ask a follow-up question about the verdict session."""
+    session = sessions.get(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if not session.get("result"):
+        raise HTTPException(status_code=202, detail="Session not complete")
+
+    from langchain_groq import ChatGroq
+    from langchain_core.messages import SystemMessage, HumanMessage
+
+    result = session["result"]
+
+    # Build context from session
+    context_parts = []
+    if result.get("decision"):
+        context_parts.append(f"Decision: {result['decision'].get('question', '')}")
+    if result.get("verdict"):
+        v = result["verdict"]
+        context_parts.append(f"Verdict: {v.get('ruling', 'N/A')} (confidence: {v.get('confidence', 0)})")
+        context_parts.append(f"Reasoning: {v.get('reasoning', '')}")
+    if result.get("synthesis"):
+        s = result["synthesis"]
+        context_parts.append(f"Synthesis: {s.get('improved_idea', '')}")
+
+    context = "\n".join(context_parts)
+
+    llm = ChatGroq(
+        model="llama-3.3-70b-versatile",
+        temperature=0.6,
+        max_tokens=1024,
+        api_key=settings.groq_api_key,
     )
 
-    for event_data in DEMO_STREAM_EVENTS:
-        event = StreamEvent(**event_data)
-        await stream_callback(event)
+    messages = [
+        SystemMessage(content=f"""You are a legal analyst following up on a courtroom AI analysis. Here's the context of the session:
 
-        # Simulate realistic streaming delays
-        content = event_data.get("content", "")
-        if "thinking" in event_data["event_type"] or "start" in event_data["event_type"]:
-            # Stream thinking tokens at ~30ms per token
-            delay = min(len(content) * 0.03, 3.0)
-        elif "complete" in event_data["event_type"]:
-            delay = 0.5
-        elif "spawned" in event_data["event_type"]:
-            delay = 0.3
-        else:
-            delay = 0.2
+{context}
 
-        await asyncio.sleep(delay)
+Answer the user's follow-up question based on this context. Be concise and insightful. Reference specific findings from the analysis when relevant."""),
+        HumanMessage(content=request.question),
+    ]
 
-    session["result"] = {
-        "decision": session["decision"],
-        "research_package": DEMO_RESEARCH_PACKAGE,
-        "prosecutor_argument": DEMO_PROSECUTOR_ARGUMENT,
-        "defense_argument": DEMO_DEFENSE_ARGUMENT,
-        "witness_reports": DEMO_WITNESS_REPORTS,
-        "verdict": DEMO_VERDICT,
-        "synthesis": DEMO_SYNTHESIS,
-        "errors": [],
-    }
+    try:
+        response = await llm.ainvoke(messages)
+        return {"answer": response.content, "session_id": session_id}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to generate follow-up: {str(e)}")

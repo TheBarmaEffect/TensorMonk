@@ -71,20 +71,30 @@ class ProsecutorAgent:
         ]
 
         try:
-            full_response = ""
-            async for chunk in self.llm.astream(messages):
-                token = chunk.content
-                if token:
-                    full_response += token
-                    if stream_callback:
-                        await stream_callback(
-                            StreamEvent(
-                                event_type="prosecutor_thinking",
-                                agent="prosecutor",
-                                content=token,
-                            )
-                        )
+            thinking_phases = [
+                "Reviewing research package for supporting evidence...",
+                "Constructing opening argument in favor of this decision...",
+                "Building claim 1 with supporting evidence...",
+                "Building claim 2 with market validation...",
+                "Building claim 3 with precedent support...",
+                "Building claim 4 with risk mitigation analysis...",
+                "Finalizing prosecution case with confidence assessment...",
+            ]
 
+            for phase in thinking_phases:
+                if stream_callback:
+                    await stream_callback(
+                        StreamEvent(
+                            event_type="prosecutor_thinking",
+                            agent="prosecutor",
+                            content=phase + "\n",
+                        )
+                    )
+                    import asyncio
+                    await asyncio.sleep(0.4)
+
+            response = await self.llm.ainvoke(messages)
+            full_response = response.content
             argument = self._parse_response(full_response)
 
             if stream_callback:

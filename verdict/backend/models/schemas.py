@@ -1,6 +1,6 @@
 """Pydantic v2 data models for the Verdict courtroom system."""
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from typing import Literal, Optional
 from datetime import datetime
 import uuid
@@ -43,6 +43,21 @@ class WitnessReport(BaseModel):
     resolution: str
     confidence: float = Field(ge=0.0, le=1.0)
     verdict_on_claim: Literal["sustained", "overruled", "inconclusive"]
+
+    @field_validator('verdict_on_claim', mode='before')
+    @classmethod
+    def normalize_verdict(cls, v):
+        """Normalize LLM's free-form verdicts to valid enum values."""
+        if not isinstance(v, str):
+            return 'inconclusive'
+        v_lower = v.lower().strip()
+        if any(word in v_lower for word in ('sustain', 'accurate', 'true', 'confirm', 'support', 'valid', 'verified')):
+            return 'sustained'
+        if any(word in v_lower for word in ('overrule', 'false', 'reject', 'invalid', 'refute', 'denied', 'incorrect')):
+            return 'overruled'
+        if v_lower in ('sustained', 'overruled', 'inconclusive'):
+            return v_lower
+        return 'inconclusive'
 
 
 class CrossExamination(BaseModel):
