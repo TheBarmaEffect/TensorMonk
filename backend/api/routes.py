@@ -22,6 +22,7 @@ from config import settings
 from models.schemas import Decision, StreamEvent
 from utils.llm_helpers import create_llm, parse_llm_json
 from utils.validators import validate_question_quality, check_format_domain_fit
+from services.session_manager import SessionLifecycle, SessionState
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +37,9 @@ SESSION_DIR.mkdir(parents=True, exist_ok=True)
 
 # In-memory session cache backed by JSON file persistence
 sessions: dict[str, dict] = {}
+
+# FSM lifecycle tracker per session — validates state transitions
+_lifecycles: dict[str, SessionLifecycle] = {}
 
 # TTL cache for domain detection — avoids redundant LLM calls for similar questions
 DOMAIN_CACHE_TTL_SECONDS: int = 300   # 5 minutes
@@ -275,6 +279,7 @@ async def start_verdict(request: StartRequest):
         "created_at": datetime.utcnow().isoformat(),
     }
     sessions[decision.id] = session
+    _lifecycles[decision.id] = SessionLifecycle(decision.id)
     _persist_session(decision.id, session)
 
     logger.info(
@@ -431,6 +436,13 @@ async def stream_verdict(websocket: WebSocket, session_id: str):
         return
 
     session["status"] = "running"
+    # Transition FSM: created → running
+    lifecycle = _lifecycles.get(session_id)
+    if lifecycle:
+        try:
+            await lifecycle.transition(SessionState.RUNNING)
+        except Exception as fsm_err:
+            logger.warning("FSM transition failed: %s", fsm_err)
     event_queue: asyncio.Queue = asyncio.Queue()
 
     async def stream_callback(event: StreamEvent):
@@ -504,10 +516,20 @@ async def stream_verdict(websocket: WebSocket, session_id: str):
                 session["result"]["analysis"] = None
 
             session["status"] = "complete"
+            if lifecycle:
+                try:
+                    await lifecycle.transition(SessionState.COMPLETE)
+                except Exception:
+                    pass
             _persist_session(session_id, session)
         except Exception as e:
             logger.error("Pipeline failed: %s", str(e))
             session["status"] = "error"
+            if lifecycle:
+                try:
+                    await lifecycle.transition(SessionState.ERROR)
+                except Exception:
+                    pass
             await event_queue.put(
                 StreamEvent(
                     event_type="error",
