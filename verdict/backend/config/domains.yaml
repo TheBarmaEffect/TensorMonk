@@ -1,0 +1,133 @@
+# Domain-aware constitutional directive overlays.
+# Loaded at runtime by the agent orchestration layer.
+# Each domain defines:
+#   - constitutional_overlay: additional prompt constraints for adversarial agents
+#   - evidence_hierarchy: ordered list of evidence types by authority
+#   - suggested_format: default output format for this domain
+#   - synthesis_anchors: few-shot tool/action examples for synthesis output
+
+business:
+  constitutional_overlay: "Ground all claims in market data, revenue projections, and competitive benchmarks. Cite specific companies, market sizes, and growth rates."
+  evidence_hierarchy:
+    - market data
+    - revenue metrics
+    - competitive analysis
+    - customer research
+    - industry reports
+  suggested_format: executive
+  synthesis_anchors:
+    - "Week 1-2: Conduct customer discovery interviews with 20 target accounts"
+    - "Week 3-4: Build MVP with core feature set, deploy on Vercel"
+    - "Month 2: Implement Stripe billing, launch to waitlist"
+
+financial:
+  constitutional_overlay: "Reference financial models, valuation multiples, capital efficiency metrics, and comparable transactions. Use DCF, IRR, and payback period where applicable."
+  evidence_hierarchy:
+    - financial statements
+    - comparable transactions
+    - valuation models
+    - market multiples
+    - analyst reports
+  suggested_format: investor
+  synthesis_anchors:
+    - "Pre-raise: Achieve $100K MRR milestone, 3-month runway buffer"
+    - "Round structure: Target 18-24 month runway at current burn rate"
+    - "Post-close: Implement WorkOS for enterprise SSO, hire VP Sales"
+
+legal:
+  constitutional_overlay: "Ground arguments in statutory authority, case law, and regulatory frameworks. Cite specific statutes, court decisions, and regulatory guidance."
+  evidence_hierarchy:
+    - statutory authority
+    - case law precedents
+    - regulatory guidance
+    - legal scholarship
+    - industry practice
+  suggested_format: legal
+  synthesis_anchors:
+    - "Phase 1: Engage outside counsel for regulatory opinion letter"
+    - "Phase 2: Implement Vanta for SOC 2 compliance automation"
+    - "Phase 3: Draft model contract terms addressing identified risks"
+
+medical:
+  constitutional_overlay: "Reference clinical evidence, FDA guidance, and patient outcome data. Cite RCTs, meta-analyses, and clinical practice guidelines. Apply evidence-based medicine hierarchy."
+  evidence_hierarchy:
+    - systematic reviews
+    - randomized controlled trials
+    - cohort studies
+    - case series
+    - expert opinion
+  suggested_format: technical
+  synthesis_anchors:
+    - "Phase 1: Design IRB protocol, submit for expedited review"
+    - "Phase 2: Recruit initial cohort (n=50), establish data collection pipeline"
+    - "Phase 3: Interim analysis at 6 months, adjust protocol per DSMB guidance"
+
+hiring:
+  constitutional_overlay: "Focus on talent market data, compensation benchmarks, organizational design patterns, and mis-hire cost analysis. Reference Glassdoor, Levels.fyi, and industry hiring data."
+  evidence_hierarchy:
+    - compensation data
+    - talent market analysis
+    - organizational precedents
+    - role performance metrics
+    - retention data
+  suggested_format: executive
+  synthesis_anchors:
+    - "Week 1: Define role scorecard with 3 must-have and 2 nice-to-have competencies"
+    - "Week 2-3: Source candidates via LinkedIn Recruiter, Otta, and referral network"
+    - "Week 4: Structured interview loop (technical, behavioral, culture)"
+
+technology:
+  constitutional_overlay: "Cite architecture precedents, scalability benchmarks, migration success rates, and technical debt quantification. Reference specific technologies, frameworks, and deployment patterns."
+  evidence_hierarchy:
+    - benchmark data
+    - architecture case studies
+    - migration postmortems
+    - vendor documentation
+    - community experience
+  suggested_format: technical
+  synthesis_anchors:
+    - "Sprint 1: Proof of concept with core integration, deploy to staging"
+    - "Sprint 2: Load testing at 10x expected traffic, identify bottlenecks"
+    - "Sprint 3: Production cutover with feature flags, rollback plan documented"
+
+strategic:
+  constitutional_overlay: "Reference M&A precedents, synergy analyses, integration frameworks, and value creation/destruction case studies. Cite specific deals and their outcomes."
+  evidence_hierarchy:
+    - deal precedents
+    - synergy analyses
+    - integration case studies
+    - market structure data
+    - regulatory precedents
+  suggested_format: executive
+  synthesis_anchors:
+    - "Phase 1: Engage investment bank for fairness opinion and deal structuring"
+    - "Phase 2: Due diligence workstreams (financial, legal, technical, cultural)"
+    - "Phase 3: Integration planning with 100-day roadmap and named workstream leads"
+
+product:
+  constitutional_overlay: "Cite user research, PMF signals, comparable product launches, and market timing analysis. Reference specific products, their launch strategies, and outcomes."
+  evidence_hierarchy:
+    - user research data
+    - product-market fit signals
+    - comparable launches
+    - market timing analysis
+    - competitive feature analysis
+  suggested_format: executive
+  synthesis_anchors:
+    - "Week 1: User interviews (n=15), synthesize into jobs-to-be-done framework"
+    - "Week 2-3: Ship v1 with core JTBD, instrument with Mixpanel/Amplitude"
+    - "Month 2: Measure retention cohort, iterate on activation flow"
+
+marketing:
+  constitutional_overlay: "Reference CAC/LTV benchmarks, channel performance data, brand studies, and campaign case studies. Cite specific channels, conversion rates, and attribution models."
+  evidence_hierarchy:
+    - performance data
+    - channel benchmarks
+    - brand studies
+    - campaign case studies
+    - attribution models
+  suggested_format: executive
+  synthesis_anchors:
+    - "Week 1: Audit current channels, establish attribution model in GA4"
+    - "Week 2-4: A/B test 3 messaging variants across top 2 channels"
+    - "Month 2: Double down on winning channel, target CAC < $50"

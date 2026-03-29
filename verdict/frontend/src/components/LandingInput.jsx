@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import MicButton from './MicButton'
+import SessionHistory from './SessionHistory'
 import useVerdict from '../hooks/useVerdict'
 
 const OUTPUT_FORMATS = [
@@ -21,7 +22,10 @@ export default function LandingInput() {
   const [text, setText] = useState('')
   const [format, setFormat] = useState('executive')
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [detectedDomain, setDetectedDomain] = useState(null)
+  const [showHistory, setShowHistory] = useState(false)
   const textareaRef = useRef(null)
+  const domainDebounce = useRef(null)
   const { submit } = useVerdict()
 
   useEffect(() => {
@@ -30,6 +34,30 @@ export default function LandingInput() {
       ta.style.height = 'auto'
       ta.style.height = Math.min(ta.scrollHeight, 160) + 'px'
     }
+  }, [text])
+
+  // Auto-detect domain and suggest format as user types
+  useEffect(() => {
+    if (domainDebounce.current) clearTimeout(domainDebounce.current)
+    if (text.trim().length < 15) { setDetectedDomain(null); return }
+
+    domainDebounce.current = setTimeout(() => {
+      fetch('/api/verdict/detect-domain', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question: text.trim() }),
+      })
+        .then((r) => r.json())
+        .then((d) => {
+          if (d.domain) {
+            setDetectedDomain(d)
+            if (d.suggested_format) setFormat(d.suggested_format)
+          }
+        })
+        .catch(() => {})
+    }, 800)
+
+    return () => clearTimeout(domainDebounce.current)
   }, [text])
 
   const handleSubmit = async () => {
@@ -48,7 +76,21 @@ export default function LandingInput() {
   const handleTranscript = useCallback((t) => setText(t), [])
 
   return (
-    <div className="h-full w-full flex flex-col items-center justify-center px-6">
+    <div className="h-full w-full flex flex-col items-center justify-center px-6 relative">
+      {/* Session history button */}
+      <div className="absolute top-4 right-4">
+        <button
+          onClick={() => setShowHistory(!showHistory)}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface)] border border-transparent hover:border-[var(--border)] transition"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          History
+        </button>
+        <AnimatePresence>
+          {showHistory && <SessionHistory onClose={() => setShowHistory(false)} />}
+        </AnimatePresence>
+      </div>
+
       {/* Logo + Title */}
       <div className="text-center mb-10 fade-in-up">
         <div className="flex items-center justify-center gap-3 mb-3">
@@ -130,13 +172,25 @@ export default function LandingInput() {
           </div>
         </div>
 
-        {/* Format label */}
-        <div className="flex items-center justify-center mt-3">
+        {/* Format label + detected domain */}
+        <div className="flex items-center justify-center mt-3 gap-2">
           <span className="text-[11px] text-[var(--text-muted)]">
             Output: <span className="text-[var(--text-secondary)]">{OUTPUT_FORMATS.find(f => f.id === format)?.label}</span>
             <span className="mx-2 text-[var(--border)]">·</span>
             Press Enter to submit
           </span>
+          <AnimatePresence>
+            {detectedDomain && (
+              <motion.span
+                initial={{ opacity: 0, scale: 0.8 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.8 }}
+                className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-gold/10 text-gold border border-gold/20"
+              >
+                {detectedDomain.domain}
+              </motion.span>
+            )}
+          </AnimatePresence>
         </div>
 
         {/* Suggestions */}
