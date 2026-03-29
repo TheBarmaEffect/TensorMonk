@@ -90,6 +90,7 @@ User Input (question + context + output_format)
 | Charts | Recharts (scope-trimmed, see below) |
 | PDF generation | fpdf2 |
 | DOCX generation | python-docx |
+| Security | XSS detection, sanitization, security headers |
 | Rate limiting | Token bucket middleware (in-memory) |
 | Resilience | Circuit breaker + exponential backoff |
 | Containerization | Docker + docker-compose |
@@ -114,7 +115,7 @@ User Input (question + context + output_format)
 - Session history: persistent JSON-backed session store via `GET /api/verdict/sessions/history`, displayed in frontend `SessionHistory` component
 - Verdict sharing: `GET /api/verdict/{id}/share` generates short URL token, `GET /shared/{token}` retrieves results
 - Web search grounding: Research Agent queries Tavily (or DuckDuckGo fallback) for current facts before LLM analysis
-- 106 unit tests across 10 test files: schemas, graph topology, API contracts, exports, resilience, cache, middleware, domain config, error types, pipeline metrics (pytest)
+- 172 tests across 14 test files: schemas, graph topology, API contracts, exports, resilience, cache, middleware, domain config, error types, pipeline metrics, security, prompts, integration, graph visualization (pytest)
 - Input validation on all API request models (question length, context length, format enum)
 - Rate limiting middleware: token bucket per IP with configurable RPM/burst
 - Request timing middleware: X-Request-ID + X-Response-Time headers on all responses
@@ -126,6 +127,10 @@ User Input (question + context + output_format)
 - Session-aware structured logging via contextvars for async correlation IDs
 - Structured error hierarchy: VerdictError → AgentError/SessionError/ExportError with JSON serialization
 - Pipeline performance metrics: per-agent durations, success/failure counts, exposed via `/metrics` endpoint
+- Security middleware: XSS pattern detection, HTML entity sanitization, body size limits, security headers
+- Centralized prompt templates: all agent prompts in `agents/prompts.py` with constitutional directive auditing
+- Session analytics: aggregate ruling distribution, domain breakdown, format usage via `/sessions/analytics`
+- Pipeline graph visualization: structured topology generation with dynamic witness nodes and routing paths
 - py.typed PEP 561 marker for static type checking support
 
 **Frontend (fully functional)**
@@ -141,6 +146,7 @@ User Input (question + context + output_format)
 - Voice input via Web Speech API — mic button with animated waveform indicator, transcript streams into text input
 - Analytics panel: Recharts BarChart (claim confidence), RadarChart (argument comparison), StatCards, witness verdicts — wired to live agent data
 - Comparison mode: side-by-side prosecution vs defense view with strength bars, aligned claims, confidence indicators, and witness verdict summary
+- Pipeline visualization: interactive agent pipeline flow diagram with real-time status indicators, parallel branch display, and dynamic witness node rendering
 - Domain-specific PDF reports: 9 domain color themes (business gold, legal indigo, medical red, financial emerald, etc.) with accent-colored titles, section headers, and dividers
 - WebSocket reconnection with exponential backoff (5 attempts, jitter, clean disconnect)
 - Robust export download helper with error handling, response validation, and user feedback
@@ -227,6 +233,9 @@ docker-compose up --build
 | `POST` | `/api/verdict/{id}/followup` | Context-aware follow-up Q&A |
 | `GET` | `/api/verdict/{id}/share` | Generate shareable verdict URL token |
 | `GET` | `/api/verdict/shared/{token}` | Retrieve verdict by share token |
+| `GET` | `/api/verdict/{id}/graph` | Pipeline graph visualization for session |
+| `GET` | `/api/verdict/graph/topology` | Static pipeline topology diagram |
+| `GET` | `/api/verdict/sessions/analytics` | Aggregate session analytics |
 | `GET` | `/health` | Deep health check with dependency readiness |
 | `GET` | `/metrics` | Pipeline performance metrics |
 
