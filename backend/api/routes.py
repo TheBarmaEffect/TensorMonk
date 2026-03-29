@@ -12,7 +12,7 @@ from typing import Optional, Literal
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, HTTPException
 from fastapi.responses import JSONResponse, PlainTextResponse, Response
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 from services.export_service import generate_markdown_report, generate_json_report, generate_pdf_report, generate_docx_report
 
@@ -86,11 +86,32 @@ OUTPUT_FORMATS = {
 
 
 class StartRequest(BaseModel):
-    """Request body for starting a new verdict session."""
+    """Request body for starting a new verdict session.
+
+    Validates question length (10-2000 chars) and optional context (max 5000 chars)
+    to prevent abuse and ensure meaningful LLM analysis.
+    """
 
     question: str
     context: Optional[str] = None
     output_format: Literal["executive", "technical", "legal", "investor"] = "executive"
+
+    @field_validator("question")
+    @classmethod
+    def validate_question(cls, v: str) -> str:
+        v = v.strip()
+        if len(v) < 10:
+            raise ValueError("Question must be at least 10 characters for meaningful analysis")
+        if len(v) > 2000:
+            raise ValueError("Question must not exceed 2000 characters")
+        return v
+
+    @field_validator("context")
+    @classmethod
+    def validate_context(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None and len(v) > 5000:
+            raise ValueError("Context must not exceed 5000 characters")
+        return v
 
 
 class StartResponse(BaseModel):
@@ -104,10 +125,23 @@ class StartResponse(BaseModel):
 
 
 class DetectDomainRequest(BaseModel):
-    """Request body for domain detection."""
+    """Request body for domain detection.
+
+    Validates question length for consistent domain classification.
+    """
 
     question: str
     context: Optional[str] = None
+
+    @field_validator("question")
+    @classmethod
+    def validate_question(cls, v: str) -> str:
+        v = v.strip()
+        if len(v) < 5:
+            raise ValueError("Question must be at least 5 characters for domain detection")
+        if len(v) > 2000:
+            raise ValueError("Question must not exceed 2000 characters")
+        return v
 
 
 class DetectDomainResponse(BaseModel):
@@ -466,7 +500,19 @@ async def export_docx(session_id: str):
 
 
 class FollowUpRequest(BaseModel):
+    """Request body for follow-up questions against session results."""
+
     question: str
+
+    @field_validator("question")
+    @classmethod
+    def validate_question(cls, v: str) -> str:
+        v = v.strip()
+        if len(v) < 5:
+            raise ValueError("Follow-up question must be at least 5 characters")
+        if len(v) > 1000:
+            raise ValueError("Follow-up question must not exceed 1000 characters")
+        return v
 
 
 @router.post("/{session_id}/followup")
