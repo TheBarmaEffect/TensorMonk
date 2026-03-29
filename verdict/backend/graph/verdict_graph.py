@@ -29,6 +29,22 @@ from agents.witness import WitnessAgent
 from agents.synthesis import SynthesisAgent
 from models.schemas import StreamEvent
 
+
+def strip_authorship(research_package: dict) -> dict:
+    """Enforce authorship blindness by stripping source metadata.
+
+    Returns a copy of the research package with any identifying fields
+    removed so downstream adversarial agents cannot attribute the research
+    to a specific source or adjust their strategy accordingly.
+    """
+    if not research_package:
+        return {}
+    blind_copy = dict(research_package)
+    # Remove any fields that could reveal research agent identity or methodology
+    for meta_key in ("agent_id", "agent", "source", "model", "timestamp", "metadata", "author"):
+        blind_copy.pop(meta_key, None)
+    return blind_copy
+
 logger = logging.getLogger(__name__)
 
 
@@ -89,19 +105,22 @@ async def prosecutor_node(state: VerdictState) -> dict:
     """Run the Prosecutor agent — argues FOR the decision.
 
     Constitutional directive: Must argue FOR regardless of personal assessment.
-    Adversarial isolation: Receives only research_package, not defense output.
+    Adversarial isolation: Receives only research_package (with authorship stripped),
+    never defense output.
     """
     agent = ProsecutorAgent()
     decision = state["decision"]
-    research = state.get("research_package", {})
+    research = strip_authorship(state.get("research_package", {}))
     callback = state.get("stream_callback")
     output_format = state.get("output_format", "executive")
+    domain = state.get("domain", "business")
 
     try:
         argument = await agent.run(
             decision_question=decision["question"],
             research_package=research,
             output_format=output_format,
+            domain=domain,
             stream_callback=callback,
         )
         return {"prosecutor_argument": argument.model_dump(mode="json")}
@@ -114,19 +133,22 @@ async def defense_node(state: VerdictState) -> dict:
     """Run the Defense agent — argues AGAINST the decision.
 
     Constitutional directive: Must argue AGAINST regardless of personal assessment.
-    Adversarial isolation: Receives only research_package, not prosecutor output.
+    Adversarial isolation: Receives only research_package (with authorship stripped),
+    never prosecutor output. Domain-aware constitutional overlay applied.
     """
     agent = DefenseAgent()
     decision = state["decision"]
-    research = state.get("research_package", {})
+    research = strip_authorship(state.get("research_package", {}))
     callback = state.get("stream_callback")
     output_format = state.get("output_format", "executive")
+    domain = state.get("domain", "business")
 
     try:
         argument = await agent.run(
             decision_question=decision["question"],
             research_package=research,
             output_format=output_format,
+            domain=domain,
             stream_callback=callback,
         )
         return {"defense_argument": argument.model_dump(mode="json")}

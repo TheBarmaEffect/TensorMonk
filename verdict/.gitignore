@@ -3,6 +3,8 @@ dist/
 .env
 *.pyc
 __pycache__/
+.claude/
+.idea/
 venv/
 .venv/
 *.egg-info/
