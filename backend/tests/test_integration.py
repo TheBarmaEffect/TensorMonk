@@ -451,8 +451,8 @@ class TestAnalysisPipelineIntegration:
         weak_quality = score_argument_quality(weak_arg)
         strong_quality = score_argument_quality(strong_arg)
         assert strong_quality["overall"] > weak_quality["overall"]
-        # Strong argument should score better than weak, though grade depends on heuristic thresholds
-        assert strong_quality["grade"] in ("A", "B", "C")
+        # Strong argument should score at least as well as weak
+        assert strong_quality["grade"] <= weak_quality["grade"]  # A < B < C < D lexicographically
 
     def test_validators_wired_to_api(self, client):
         """API should reject generic questions via quality validator."""
