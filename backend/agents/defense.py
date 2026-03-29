@@ -22,6 +22,10 @@ logger = logging.getLogger(__name__)
 class DefenseAgent:
     """Argues AGAINST the decision using the anonymous research package.
 
+    Adversarial isolation enforced at graph level — never sees prosecution output.
+    """
+    """Argues AGAINST the decision using the anonymous research package.
+
     Adversarial isolation is enforced at the graph level — this agent
     never receives the prosecutor agent's output.
     """
