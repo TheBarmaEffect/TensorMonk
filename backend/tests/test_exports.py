@@ -104,6 +104,31 @@ class TestMarkdownExport:
         assert "SUSTAINED" in md
         assert "OVERRULED" in md
 
+    def test_includes_stability_metrics_when_present(self):
+        session = {**SAMPLE_SESSION, "analysis": {
+            "verdict_stability": {
+                "combined_robustness": 0.85,
+                "verdict_is_robust": True,
+                "evidence_margin": "moderate",
+                "flip_rate": 0.04,
+            },
+            "argument_quality": {
+                "prosecutor": {"grade": "B", "overall": 0.72},
+                "defense": {"grade": "C", "overall": 0.48},
+                "quality_gap": 0.24,
+                "weaker_side": "defense",
+            },
+        }}
+        md = generate_markdown_report(session)
+        assert "Analysis & Quality Metrics" in md
+        assert "Robustness Score" in md
+        assert "Prosecution Grade" in md
+        assert "Quality Gap" in md
+
+    def test_omits_stability_when_absent(self):
+        md = generate_markdown_report(SAMPLE_SESSION)
+        assert "Analysis & Quality Metrics" not in md
+
 
 class TestJSONExport:
     def test_generates_valid_json(self):
