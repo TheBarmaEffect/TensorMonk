@@ -22,15 +22,17 @@ All notable changes to the Verdict project.
 - **Analysis API Endpoint**: `GET /api/verdict/{id}/analysis` — returns quality grades, dependency graphs, and stability analysis for completed sessions
 
 ### Refactored — Code Quality (DRY)
+- **Centralized All Agent Prompts**: All 6 agents now import system prompts from `agents/prompts.py` — zero inline prompt definitions remain, eliminating ~120 lines of duplicated prompt text
 - **Shared LLM Helpers** (`utils/llm_helpers.py`): Extracted 4 duplicated patterns from all 6 agents into shared utilities — `parse_llm_json()`, `emit_thinking_phases()`, `create_llm()`, `retry_with_low_temperature()`
+- **Circuit Breaker Wired to Production**: `call_llm_with_resilience()` routes LLM retry calls through the circuit breaker — no longer dead code
+- **Human-in-the-Loop Activated**: `INTERRUPT_BEFORE_VERDICT` env var activates `interrupt_before` on the verdict review node
 - **Agent Cleanup**: All 6 agents refactored to use shared helpers; removed unused `ChatGroq` and `settings` imports
-- **Centralized Format Instructions**: Prosecutor, Defense, and Research agents now use `prompts.get_format_instruction()` instead of inline format dicts
 - **Route DRY Cleanup**: `detect_domain` and `followup` endpoints refactored to use `create_llm()` and `parse_llm_json()`
 - **Validators Wired to Production**: `validate_question_quality()`, `check_format_domain_fit()`, and `validate_research_package()` now used in API routes and graph nodes
 - **Inline Analysis**: Session results now include embedded argument quality, stability, and dependency graph analysis (no separate endpoint needed)
 
 ### Testing
-- 389 total tests across 22 test files (up from 172)
+- 395 total tests across 22 test files (up from 172)
 - Added LLM helpers tests: JSON parsing, code fence stripping, thinking phases, factory, retry (23 tests)
 - Added API quality gate tests: generic rejection, format suggestion field (4 tests)
 - Added graph pipeline tests: adaptive temperature, calibration wiring, constitutional compliance (31 tests)
