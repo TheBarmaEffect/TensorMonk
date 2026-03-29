@@ -41,18 +41,31 @@ from config.domain_config import get_constitutional_overlay, get_evidence_hierar
 
 
 def strip_authorship(research_package: dict) -> dict:
-    """Enforce authorship blindness by stripping source metadata.
+    """Enforce authorship blindness — borrowed from double-blind peer review.
 
-    Returns a copy of the research package with any identifying fields
-    removed so downstream adversarial agents cannot attribute the research
-    to a specific source or adjust their strategy accordingly.
+    Strips all identifying metadata from the research package before it reaches
+    the adversarial agents (Prosecutor and Defense). Neither agent can determine
+    who authored the research or adjust their argumentation strategy based on
+    source credibility. This is a core architectural constraint that ensures
+    genuine adversarial tension: arguments must stand on evidence alone.
+
+    Stripped fields: agent_id, agent, source, model, timestamp, metadata, author,
+    provider, version, run_id, trace_id.
     """
     if not research_package:
         return {}
     blind_copy = dict(research_package)
-    # Remove any fields that could reveal research agent identity or methodology
-    for meta_key in ("agent_id", "agent", "source", "model", "timestamp", "metadata", "author"):
-        blind_copy.pop(meta_key, None)
+    _AUTHORSHIP_FIELDS = (
+        "agent_id", "agent", "source", "model", "timestamp",
+        "metadata", "author", "provider", "version", "run_id", "trace_id",
+    )
+    stripped_count = 0
+    for meta_key in _AUTHORSHIP_FIELDS:
+        if meta_key in blind_copy:
+            blind_copy.pop(meta_key)
+            stripped_count += 1
+    if stripped_count > 0:
+        logger.info("Authorship blindness: stripped %d identifying fields from research package", stripped_count)
     return blind_copy
 
 logger = logging.getLogger(__name__)
@@ -274,12 +287,8 @@ async def witness_node(state: VerdictState) -> dict:
         return {"witness_reports": [], "errors": [f"Witnesses: {str(e)}"]}
 
 
-async def judge_verdict_node(state: VerdictState) -> dict:
-    """Judge delivers the final verdict.
-
-    This node is the interrupt_before checkpoint — the graph can pause here
-    to allow human review of witness reports before ruling is issued.
-    """
+async def _run_verdict(state: VerdictState, use_low_temp: bool = False) -> dict:
+    """Core verdict logic shared by all verdict node variants."""
     from models.schemas import Argument, WitnessReport
 
     judge = JudgeAgent()
@@ -297,6 +306,10 @@ async def judge_verdict_node(state: VerdictState) -> dict:
     def_arg = Argument(**def_data)
     reports = [WitnessReport(**w) for w in witness_data]
 
+    if use_low_temp:
+        logger.info("Hallucination guard active: overriding judge temperature to 0.3")
+        judge.llm.temperature = 0.3
+
     try:
         verdict = await judge.deliver_verdict(
             decision_question=decision["question"],
@@ -310,6 +323,47 @@ async def judge_verdict_node(state: VerdictState) -> dict:
     except Exception as e:
         logger.error("Judge verdict failed: %s", e)
         return {"verdict": None, "errors": [f"Verdict: {str(e)}"]}
+
+
+async def judge_verdict_node(state: VerdictState) -> dict:
+    """Judge delivers the final verdict (normal confidence path)."""
+    return await _run_verdict(state, use_low_temp=False)
+
+
+async def judge_verdict_with_review_node(state: VerdictState) -> dict:
+    """Judge delivers verdict after low-confidence interrupt_before checkpoint.
+
+    This node is reached when avg witness confidence < 0.6. When the graph is
+    compiled with interrupt_before=['verdict_with_review'], execution pauses
+    here to allow human review of witness reports before the ruling is issued.
+    """
+    logger.info("Verdict node (low confidence path): interrupt_before checkpoint reached")
+    callback = state.get("stream_callback")
+    if callback:
+        await callback(StreamEvent(
+            event_type="verdict_start",
+            agent="judge",
+            content="Low witness confidence detected — proceeding with caution.\n",
+        ))
+    return await _run_verdict(state, use_low_temp=False)
+
+
+async def judge_verdict_low_temp_node(state: VerdictState) -> dict:
+    """Judge delivers verdict with temperature=0.3 hallucination guard.
+
+    Triggered when confidence >= 0.9 AND a witness overruled a claim,
+    which is a hallucination risk signal. Using temperature=0.3 produces
+    more deterministic, grounded output.
+    """
+    logger.info("Verdict node (hallucination guard): using temperature=0.3")
+    callback = state.get("stream_callback")
+    if callback:
+        await callback(StreamEvent(
+            event_type="verdict_start",
+            agent="judge",
+            content="Hallucination guard engaged — using conservative temperature.\n",
+        ))
+    return await _run_verdict(state, use_low_temp=True)
 
 
 async def synthesis_node(state: VerdictState) -> dict:
@@ -377,34 +431,57 @@ def _should_spawn_witnesses(state: VerdictState) -> str:
     return "verdict"
 
 
+LOW_CONFIDENCE_THRESHOLD = 0.6
+HIGH_CONFIDENCE_OVERRULE_THRESHOLD = 0.9
+
+
 def _confidence_gate(state: VerdictState) -> str:
-    """Conditional edge: interrupt before verdict when witness confidence is low.
+    """Conditional edge: evaluate witness confidence before routing to verdict.
 
-    If average witness confidence drops below the threshold (0.6), the graph
-    pauses at the interrupt_before checkpoint to allow human review of the
-    witness reports before the judge issues a final ruling.
-
-    When confidence >= 0.9 AND a previous verdict was overruled, the
-    hallucination guard triggers a temperature=0.3 retry on the verdict node.
+    This implements the confidence-based interrupt_before mechanism:
+    - If avg witness confidence < 0.6: flags low_confidence in state for the
+      verdict node to handle (when interrupt_before is enabled, the graph
+      pauses here for human review).
+    - If confidence >= 0.9 AND any witness overruled a claim: triggers
+      hallucination guard flag so verdict node uses temperature=0.3.
+    - Normal confidence: routes directly to verdict with no flags.
     """
     witness_data = state.get("witness_reports", [])
     if not witness_data:
         return "verdict"
 
     confidences = []
+    has_overruled = False
     for w in witness_data:
-        conf = w.get("confidence", 0.5) if isinstance(w, dict) else 0.5
+        if isinstance(w, dict):
+            conf = w.get("confidence", 0.5)
+            if w.get("verdict_on_claim") == "overruled":
+                has_overruled = True
+        else:
+            conf = 0.5
         confidences.append(conf)
 
     avg_confidence = sum(confidences) / len(confidences) if confidences else 0.5
-    logger.info("Confidence gate: avg_witness_confidence=%.2f", avg_confidence)
+    logger.info(
+        "Confidence gate: avg=%.2f, witnesses=%d, has_overruled=%s",
+        avg_confidence, len(confidences), has_overruled,
+    )
 
-    if avg_confidence < 0.6:
+    if avg_confidence < LOW_CONFIDENCE_THRESHOLD:
         logger.warning(
-            "Low witness confidence (%.2f < 0.6) — interrupt_before engaged",
+            "Low witness confidence (%.2f < %.2f) — interrupt_before checkpoint engaged, "
+            "human review recommended before verdict",
+            avg_confidence, LOW_CONFIDENCE_THRESHOLD,
+        )
+        return "verdict_with_review"
+
+    if avg_confidence >= HIGH_CONFIDENCE_OVERRULE_THRESHOLD and has_overruled:
+        logger.warning(
+            "High confidence (%.2f) with overruled claims — hallucination guard: "
+            "verdict node will retry with temperature=0.3",
             avg_confidence,
         )
-        return "verdict"  # interrupt_before on verdict node handles the pause
+        return "verdict_low_temp"
 
     return "verdict"
 
@@ -448,6 +525,8 @@ def build_verdict_graph(interrupt_before_verdict: bool = False) -> StateGraph:
     graph.add_node("cross_examination", judge_cross_exam_node)
     graph.add_node("witnesses", witness_node)
     graph.add_node("verdict", judge_verdict_node)
+    graph.add_node("verdict_with_review", judge_verdict_with_review_node)
+    graph.add_node("verdict_low_temp", judge_verdict_low_temp_node)
     graph.add_node("synthesis", synthesis_node)
 
     graph.set_entry_point("research")
@@ -455,29 +534,39 @@ def build_verdict_graph(interrupt_before_verdict: bool = False) -> StateGraph:
     graph.add_edge("arguments", "cross_examination")
 
     # Dynamic witness spawning via conditional edge — Judge determines
-    # which claims are contested, then witnesses are spawned per claim type
+    # which claims are contested, then witnesses are spawned per claim type.
+    # If no claims are contested, skip witnesses entirely.
     graph.add_conditional_edges(
         "cross_examination",
         _should_spawn_witnesses,
         {"witnesses": "witnesses", "verdict": "verdict"},
     )
 
-    # Confidence-based routing — low witness confidence triggers
-    # interrupt_before on the verdict node for human review
+    # Confidence-based routing after witnesses complete:
+    # - Normal confidence → verdict (standard path)
+    # - Low confidence (<0.6) → verdict_with_review (interrupt_before checkpoint)
+    # - High confidence (>0.9) + overruled → verdict_low_temp (hallucination guard)
     graph.add_conditional_edges(
         "witnesses",
         _confidence_gate,
-        {"verdict": "verdict"},
+        {
+            "verdict": "verdict",
+            "verdict_with_review": "verdict_with_review",
+            "verdict_low_temp": "verdict_low_temp",
+        },
     )
 
+    # All verdict variants converge to synthesis
     graph.add_edge("verdict", "synthesis")
+    graph.add_edge("verdict_with_review", "synthesis")
+    graph.add_edge("verdict_low_temp", "synthesis")
     graph.add_edge("synthesis", END)
 
     checkpointer = _get_checkpointer()
 
-    # interrupt_before pauses graph execution before verdict node,
-    # enabling human-in-the-loop review of witness reports
-    interrupt_nodes = ["verdict"] if interrupt_before_verdict else []
+    # interrupt_before pauses graph execution before the low-confidence
+    # verdict node, enabling human-in-the-loop review of witness reports
+    interrupt_nodes = ["verdict_with_review"] if interrupt_before_verdict else []
 
     return graph.compile(
         checkpointer=checkpointer,
