@@ -17,6 +17,7 @@ from config import settings
 from api.routes import router
 from middleware.rate_limiter import RateLimiterMiddleware
 from middleware.request_timing import RequestTimingMiddleware
+from utils.metrics import pipeline_metrics
 
 # Configure logging
 logging.basicConfig(
@@ -101,7 +102,14 @@ async def health():
         "health": "healthy" if critical_ok else "degraded",
         "uptime_seconds": uptime_seconds,
         "checks": checks,
+        "metrics": pipeline_metrics.summary(),
     }
+
+
+@app.get("/metrics")
+async def metrics():
+    """Pipeline performance metrics endpoint for monitoring."""
+    return pipeline_metrics.summary()
 
 
 @app.on_event("startup")
