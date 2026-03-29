@@ -1,4 +1,15 @@
-"""Witness Agent factory — spawns specialist witnesses to verify contested claims."""
+"""Witness Agent factory — spawns specialist witnesses to verify contested claims.
+
+Constitutional role: Neutral verification. Witnesses evaluate claims objectively
+without knowledge of which agent (Prosecutor or Defense) made the claim.
+
+Three specialist types:
+- FactWitness: Verifies factual accuracy of assertions
+- DataWitness: Evaluates statistical claims and data quality
+- PrecedentWitness: Validates historical precedent citations
+
+Uses low temperature (0.3) for deterministic, grounded verification.
+"""
 
 import json
 import logging
@@ -9,6 +20,7 @@ from langchain_core.messages import SystemMessage, HumanMessage
 
 from config import settings
 from models.schemas import WitnessReport, StreamEvent
+from utils.resilience import retry_with_backoff
 
 logger = logging.getLogger(__name__)
 
@@ -98,11 +110,11 @@ class WitnessAgent:
         ]
 
         try:
-            full_response = ""
-            async for chunk in self.llm.astream(messages):
-                token = chunk.content
-                if token:
-                    full_response += token
+            response = await retry_with_backoff(
+                self.llm.ainvoke, messages,
+                max_retries=2, base_delay=0.5, operation_name=f"Witness ({witness_type})",
+            )
+            full_response = response.content
 
             data = self._parse_json(full_response)
 
