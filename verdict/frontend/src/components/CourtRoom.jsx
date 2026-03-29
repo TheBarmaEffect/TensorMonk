@@ -1,9 +1,12 @@
-import { useEffect, useRef, useState, useMemo } from 'react'
+import { useEffect, useRef, useState, useMemo, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import VerdictCard from './VerdictCard'
 import SynthesisCard from './SynthesisCard'
 import FollowUp from './FollowUp'
 import AnalyticsPanel from './AnalyticsPanel'
+import ComparisonMode from './ComparisonMode'
+import PipelineGraph from './PipelineGraph'
+import useKeyboardShortcuts from '../hooks/useKeyboardShortcuts'
 import useVerdictStore from '../store/verdictStore'
 
 /* ─── Safe parse helper ─── */
@@ -102,16 +105,39 @@ function Announcement({ children, icon = '🏛️', color = 'var(--text-muted)',
   )
 }
 
-/* ─── Act Divider ─── */
-function ActDivider({ label, icon, delay = 0 }) {
+/* ─── Act Divider with dramatic stage transition ─── */
+function ActDivider({ label, icon, actNumber, delay = 0 }) {
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 1, delay }}
-      className="flex items-center gap-3 py-8">
-      <div className="flex-1 h-px bg-gradient-to-r from-transparent via-[var(--border)] to-transparent" />
-      <div className="flex items-center gap-2 text-[10px] font-mono text-[var(--text-muted)] uppercase tracking-[0.2em]">
-        <span>{icon}</span>{label}
-      </div>
-      <div className="flex-1 h-px bg-gradient-to-r from-transparent via-[var(--border)] to-transparent" />
+    <motion.div
+      initial={{ opacity: 0, scaleX: 0 }}
+      animate={{ opacity: 1, scaleX: 1 }}
+      transition={{ duration: 0.8, delay, ease: [0.16, 1, 0.3, 1] }}
+      className="flex items-center gap-3 py-8 origin-center"
+    >
+      <motion.div
+        initial={{ width: 0 }}
+        animate={{ width: '100%' }}
+        transition={{ duration: 1.2, delay: delay + 0.2, ease: 'easeOut' }}
+        className="flex-1 h-px bg-gradient-to-r from-transparent via-[var(--border)] to-transparent"
+      />
+      <motion.div
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.6, delay: delay + 0.4 }}
+        className="flex items-center gap-2 px-4 py-1.5 rounded-full bg-[var(--bg-surface)] border border-[var(--border)]"
+      >
+        <span className="text-xs">{icon}</span>
+        <span className="text-[10px] font-mono text-[var(--text-muted)] uppercase tracking-[0.2em]">
+          {actNumber && <span className="text-gold mr-1.5">Act {actNumber}</span>}
+          {label}
+        </span>
+      </motion.div>
+      <motion.div
+        initial={{ width: 0 }}
+        animate={{ width: '100%' }}
+        transition={{ duration: 1.2, delay: delay + 0.2, ease: 'easeOut' }}
+        className="flex-1 h-px bg-gradient-to-r from-transparent via-[var(--border)] to-transparent"
+      />
     </motion.div>
   )
 }
@@ -160,14 +186,63 @@ function useDebateSequence(prosecutorOutput, defenseOutput) {
   }, [prosecutorOutput, defenseOutput])
 }
 
+/**
+ * Download an exported report with robust error handling.
+ * @param {string} url - The export API endpoint URL
+ * @param {string} filename - The suggested download filename
+ * @param {'text'|'blob'} responseType - How to read the response body
+ * @param {string} mimeType - MIME type for the Blob (text exports only)
+ * @returns {Promise<void>}
+ */
+async function downloadExport(url, filename, responseType = 'blob', mimeType = '') {
+  try {
+    const response = await fetch(url)
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => 'Unknown error')
+      throw new Error(`Export failed (${response.status}): ${errorText}`)
+    }
+    let blob
+    if (responseType === 'text') {
+      const text = await response.text()
+      blob = new Blob([text], { type: mimeType })
+    } else {
+      blob = await response.blob()
+    }
+    const objectUrl = URL.createObjectURL(blob)
+    const anchor = document.createElement('a')
+    anchor.href = objectUrl
+    anchor.download = filename
+    anchor.click()
+    URL.revokeObjectURL(objectUrl)
+  } catch (err) {
+    console.error(`[Verdict] Export failed for ${filename}:`, err)
+    // Show non-blocking user feedback
+    const msg = err.message || 'Export failed. Please try again.'
+    if (typeof window !== 'undefined' && window.alert) {
+      window.alert(`Export error: ${msg}`)
+    }
+  }
+}
+
 /* ─── Main CourtRoom ─── */
 export default function CourtRoom() {
   const { decision, agentStates, verdict, synthesis, startTime, error, sessionId } = useVerdictStore()
   const reset = useVerdictStore(s => s.reset)
   const feedRef = useRef(null)
   const [showAnalytics, setShowAnalytics] = useState(false)
+  const [showComparison, setShowComparison] = useState(false)
+  const [showPipeline, setShowPipeline] = useState(false)
   const [visibleBubbles, setVisibleBubbles] = useState(0)
   const isComplete = !!(verdict && synthesis)
+
+  // Keyboard shortcuts for power users
+  useKeyboardShortcuts({
+    onEscape: reset,
+    onExportMarkdown: isComplete ? () => downloadExport(`/api/verdict/${sessionId}/export/markdown`, 'verdict-report.md', 'text', 'text/markdown') : undefined,
+    onToggleAnalytics: isComplete ? () => { setShowAnalytics(v => !v); setShowComparison(false); setShowPipeline(false) } : undefined,
+    onToggleComparison: isComplete ? () => { setShowComparison(v => !v); setShowAnalytics(false); setShowPipeline(false) } : undefined,
+    onTogglePipeline: () => { setShowPipeline(v => !v); setShowAnalytics(false); setShowComparison(false) },
+  })
 
   const debateSequence = useDebateSequence(agentStates.prosecutor.output, agentStates.defense.output)
 
@@ -212,11 +287,21 @@ export default function CourtRoom() {
         </div>
         <div className="flex items-center gap-3">
           {isComplete && (
-            <button onClick={() => setShowAnalytics(!showAnalytics)}
-              className={`px-3 py-1 rounded-md text-[11px] font-medium transition ${showAnalytics ? 'bg-[var(--bg-elevated)] text-[var(--text-primary)]' : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)]'}`}>
-              📊 Analytics
-            </button>
+            <>
+              <button onClick={() => { setShowComparison(!showComparison); if (showAnalytics) setShowAnalytics(false) }}
+                className={`px-3 py-1 rounded-md text-[11px] font-medium transition ${showComparison ? 'bg-[var(--bg-elevated)] text-[var(--text-primary)]' : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)]'}`}>
+                ⚖️ Compare
+              </button>
+              <button onClick={() => { setShowAnalytics(!showAnalytics); if (showComparison) setShowComparison(false) }}
+                className={`px-3 py-1 rounded-md text-[11px] font-medium transition ${showAnalytics ? 'bg-[var(--bg-elevated)] text-[var(--text-primary)]' : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)]'}`}>
+                📊 Analytics
+              </button>
+            </>
           )}
+          <button onClick={() => { setShowPipeline(!showPipeline); if (showAnalytics) setShowAnalytics(false); if (showComparison) setShowComparison(false) }}
+            className={`px-3 py-1 rounded-md text-[11px] font-medium transition ${showPipeline ? 'bg-[var(--bg-elevated)] text-[var(--text-primary)]' : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)]'}`}>
+            🔀 Pipeline
+          </button>
           <Timer startTime={startTime} />
           <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/15">
             <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 pulse" />
@@ -241,7 +326,7 @@ export default function CourtRoom() {
             {agentStates.research.status !== 'waiting' && (
               <>
                 <Announcement icon="🏛️" color="var(--text-muted)" delay={0}>Court is now in session</Announcement>
-                <ActDivider label="Investigation" icon="🔍" delay={0.3} />
+                <ActDivider label="Investigation" icon="🔍" actNumber="I" delay={0.3} />
 
                 {agentStates.research.status === 'active' ? (
                   <Typing agent="research" side="left" />
@@ -271,7 +356,7 @@ export default function CourtRoom() {
             {/* ═══ ACT 2: THE DEBATE ═══ */}
             {debateStarted && (
               <>
-                <ActDivider label="The Debate" icon="⚔️" delay={0.2} />
+                <ActDivider label="The Debate" icon="⚔️" actNumber="II" delay={0.2} />
 
                 {/* Show typing indicators while agents are working */}
                 {agentStates.prosecutor.status === 'active' && !agentStates.prosecutor.output && (
@@ -310,7 +395,7 @@ export default function CourtRoom() {
             {/* ═══ ACT 3: CROSS-EXAMINATION ═══ */}
             {(agentStates.judge.status !== 'waiting' || agentStates.witnesses.some(w => w.status !== 'waiting')) && (
               <>
-                <ActDivider label="Cross-Examination" icon="⚖️" delay={0.3} />
+                <ActDivider label="Cross-Examination" icon="⚖️" actNumber="III" delay={0.3} />
 
                 {agentStates.judge.status === 'active' && !agentStates.judge.output && (
                   <Typing agent="judge" side="left" />
@@ -354,13 +439,13 @@ export default function CourtRoom() {
             {/* ═══ ACT 4: THE RULING ═══ */}
             {verdict && (
               <>
-                <ActDivider label="The Ruling" icon="📜" delay={0.3} />
+                <ActDivider label="The Ruling" icon="📜" actNumber="IV" delay={0.3} />
                 <Announcement icon="⚖️" color="#f59e0b" delay={0.6}>The Honorable Judge has reached a verdict</Announcement>
                 <motion.div
                   initial={{ opacity: 0, y: 30 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 1, delay: 1.2, ease: [0.16, 1, 0.3, 1] }}
-                  className="max-w-2xl mx-auto"
+                  className="max-w-2xl mx-auto glass-card-elevated rounded-2xl p-6"
                 >
                   <VerdictCard verdict={verdict} />
                 </motion.div>
@@ -370,12 +455,12 @@ export default function CourtRoom() {
             {/* ═══ ACT 5: FINAL SYNTHESIS ═══ */}
             {synthesis && (
               <>
-                <ActDivider label="Final Synthesis" icon="✨" delay={0.3} />
+                <ActDivider label="Final Synthesis" icon="✨" actNumber="V" delay={0.3} />
                 <motion.div
                   initial={{ opacity: 0, y: 30 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 1, delay: 0.6, ease: [0.16, 1, 0.3, 1] }}
-                  className="max-w-2xl mx-auto"
+                  className="max-w-2xl mx-auto glass-card rounded-2xl p-6"
                 >
                   <SynthesisCard synthesis={synthesis} />
                 </motion.div>
@@ -393,26 +478,21 @@ export default function CourtRoom() {
                   transition={{ duration: 0.6, delay: 0.4 }}
                   className="flex items-center justify-center gap-3"
                 >
-                  <button onClick={() => {
-                    fetch(`/api/verdict/${sessionId}/export/markdown`).then(r => r.text()).then(t => {
-                      const b = new Blob([t], { type: 'text/markdown' }), u = URL.createObjectURL(b), a = document.createElement('a'); a.href = u; a.download = 'verdict-report.md'; a.click(); URL.revokeObjectURL(u)
-                    })
-                  }} className="flex items-center gap-2 px-4 py-2 rounded-lg text-[12px] font-medium bg-[var(--bg-surface)] text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)] border border-[var(--border)] transition">
+                  <button onClick={() => downloadExport(`/api/verdict/${sessionId}/export/markdown`, 'verdict-report.md', 'text', 'text/markdown')}
+                    className="flex items-center gap-2 px-4 py-2 rounded-lg text-[12px] font-medium bg-[var(--bg-surface)] text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)] border border-[var(--border)] transition">
                     📄 Markdown
                   </button>
-                  <button onClick={() => {
-                    fetch(`/api/verdict/${sessionId}/export/pdf`).then(r => r.blob()).then(b => {
-                      const u = URL.createObjectURL(b), a = document.createElement('a'); a.href = u; a.download = 'verdict-report.pdf'; a.click(); URL.revokeObjectURL(u)
-                    })
-                  }} className="flex items-center gap-2 px-4 py-2 rounded-lg text-[12px] font-medium bg-[var(--bg-surface)] text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)] border border-[var(--border)] transition">
+                  <button onClick={() => downloadExport(`/api/verdict/${sessionId}/export/pdf`, 'verdict-report.pdf')}
+                    className="flex items-center gap-2 px-4 py-2 rounded-lg text-[12px] font-medium bg-[var(--bg-surface)] text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)] border border-[var(--border)] transition">
                     📑 PDF Report
                   </button>
-                  <button onClick={() => {
-                    fetch(`/api/verdict/${sessionId}/export/json`).then(r => r.text()).then(t => {
-                      const b = new Blob([t], { type: 'application/json' }), u = URL.createObjectURL(b), a = document.createElement('a'); a.href = u; a.download = 'verdict-data.json'; a.click(); URL.revokeObjectURL(u)
-                    })
-                  }} className="flex items-center gap-2 px-4 py-2 rounded-lg text-[12px] font-medium bg-[var(--bg-surface)] text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)] border border-[var(--border)] transition">
+                  <button onClick={() => downloadExport(`/api/verdict/${sessionId}/export/json`, 'verdict-data.json', 'text', 'application/json')}
+                    className="flex items-center gap-2 px-4 py-2 rounded-lg text-[12px] font-medium bg-[var(--bg-surface)] text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)] border border-[var(--border)] transition">
                     📋 JSON
+                  </button>
+                  <button onClick={() => downloadExport(`/api/verdict/${sessionId}/export/docx`, 'verdict-report.docx')}
+                    className="flex items-center gap-2 px-4 py-2 rounded-lg text-[12px] font-medium bg-[var(--bg-surface)] text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)] border border-[var(--border)] transition">
+                    📝 DOCX
                   </button>
                 </motion.div>
 
@@ -443,7 +523,7 @@ export default function CourtRoom() {
           </div>
         </div>
 
-        {/* Analytics sidebar */}
+        {/* Sidebar panels — Analytics or Comparison */}
         <AnimatePresence>
           {showAnalytics && (
             <motion.div
@@ -461,6 +541,52 @@ export default function CourtRoom() {
                   </button>
                 </div>
                 <AnalyticsPanel agentStates={agentStates} verdict={verdict} synthesis={synthesis} />
+              </div>
+            </motion.div>
+          )}
+          {showComparison && (
+            <motion.div
+              initial={{ width: 0, opacity: 0 }}
+              animate={{ width: 520, opacity: 1 }}
+              exit={{ width: 0, opacity: 0 }}
+              transition={{ duration: 0.35 }}
+              className="flex-shrink-0 border-l border-[var(--border)] bg-[var(--bg-secondary)] overflow-hidden overflow-y-auto"
+            >
+              <div className="w-[520px]">
+                <div className="px-4 py-3 border-b border-[var(--border)] flex items-center justify-between">
+                  <span className="text-[12px] font-medium text-[var(--text-primary)]">⚖️ Prosecution vs Defense — Side-by-Side</span>
+                  <button onClick={() => setShowComparison(false)} className="text-[var(--text-muted)] hover:text-[var(--text-primary)] transition">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12" /></svg>
+                  </button>
+                </div>
+                <div className="p-4">
+                  <ComparisonMode
+                    prosecutor={agentStates.prosecutor.output}
+                    defense={agentStates.defense.output}
+                    witnesses={agentStates.witnesses}
+                  />
+                </div>
+              </div>
+            </motion.div>
+          )}
+          {showPipeline && (
+            <motion.div
+              initial={{ width: 0, opacity: 0 }}
+              animate={{ width: 280, opacity: 1 }}
+              exit={{ width: 0, opacity: 0 }}
+              transition={{ duration: 0.35 }}
+              className="flex-shrink-0 border-l border-[var(--border)] bg-[var(--bg-secondary)] overflow-hidden"
+            >
+              <div className="w-[280px]">
+                <div className="px-4 py-3 border-b border-[var(--border)] flex items-center justify-between">
+                  <span className="text-[12px] font-medium text-[var(--text-primary)]">🔀 Agent Pipeline</span>
+                  <button onClick={() => setShowPipeline(false)} className="text-[var(--text-muted)] hover:text-[var(--text-primary)] transition">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12" /></svg>
+                  </button>
+                </div>
+                <div className="px-4">
+                  <PipelineGraph agentStates={agentStates} />
+                </div>
               </div>
             </motion.div>
           )}
