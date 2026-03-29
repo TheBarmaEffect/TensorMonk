@@ -10,7 +10,7 @@ Modules:
     validators: Domain-aware input validation and quality scoring
     argument_graph: Argument dependency DAG with cascading impact analysis
     verdict_stability: Monte Carlo perturbation testing for verdict robustness
-    argument_quality: 5-dimension heuristic assessment with A-D grading
+    argument_quality: 6-dimension heuristic assessment with A-D grading
 """
 
 from .llm_helpers import parse_llm_json, create_llm, emit_thinking_phases, retry_with_low_temperature
