@@ -125,6 +125,8 @@ User Input (question + context + output_format)
 - Domain badge auto-detected as user types
 - Voice input via Web Speech API — mic button with animated waveform indicator, transcript streams into text input
 - Analytics panel: Recharts BarChart (claim confidence), RadarChart (argument comparison), StatCards, witness verdicts — wired to live agent data
+- Comparison mode: side-by-side prosecution vs defense view with strength bars, aligned claims, confidence indicators, and witness verdict summary
+- Domain-specific PDF reports: 9 domain color themes (business gold, legal indigo, medical red, financial emerald, etc.) with accent-colored titles, section headers, and dividers
 
 **Deployment**
 - Frontend live on Vercel: [https://frontend-phi-ten-83.vercel.app](https://frontend-phi-ten-83.vercel.app)
