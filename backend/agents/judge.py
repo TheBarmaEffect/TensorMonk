@@ -10,6 +10,7 @@ from langchain_core.messages import SystemMessage, HumanMessage
 
 from config import settings
 from models.schemas import Argument, WitnessReport, VerdictResult, StreamEvent
+from utils.resilience import retry_with_backoff
 
 logger = logging.getLogger(__name__)
 
@@ -132,7 +133,10 @@ class JudgeAgent:
                     )
                     await asyncio.sleep(0.3)
 
-            response = await self.llm.ainvoke(messages)
+            response = await retry_with_backoff(
+                self.llm.ainvoke, messages,
+                max_retries=2, base_delay=1.0, operation_name="Judge cross-examination",
+            )
             full_response = response.content
 
             result = self._parse_json(full_response)
@@ -223,7 +227,10 @@ class JudgeAgent:
                     )
                     await asyncio.sleep(0.4)
 
-            response = await self.llm.ainvoke(messages)
+            response = await retry_with_backoff(
+                self.llm.ainvoke, messages,
+                max_retries=2, base_delay=1.0, operation_name="Judge verdict",
+            )
             full_response = response.content
 
             data = self._parse_json(full_response)

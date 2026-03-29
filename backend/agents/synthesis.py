@@ -10,6 +10,7 @@ from langchain_core.messages import SystemMessage, HumanMessage
 
 from config import settings
 from config.domain_config import get_synthesis_anchors, get_suggested_format
+from utils.resilience import retry_with_backoff
 from models.schemas import (
     Argument,
     WitnessReport,
@@ -150,7 +151,10 @@ class SynthesisAgent:
                     )
                     await asyncio.sleep(0.3)
 
-            response = await self.llm.ainvoke(messages)
+            response = await retry_with_backoff(
+                self.llm.ainvoke, messages,
+                max_retries=2, base_delay=1.0, operation_name="Synthesis LLM",
+            )
             full_response = response.content
 
             data = self._parse_json(full_response)
@@ -164,7 +168,10 @@ class SynthesisAgent:
                     max_tokens=3000,
                     api_key=settings.groq_api_key,
                 )
-                retry_response = await retry_llm.ainvoke(messages)
+                retry_response = await retry_with_backoff(
+                    retry_llm.ainvoke, messages,
+                    max_retries=1, base_delay=0.5, operation_name="Synthesis LLM (low-temp retry)",
+                )
                 data = self._parse_json(retry_response.content)
 
             synthesis = Synthesis(
