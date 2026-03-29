@@ -241,3 +241,35 @@ class TestLogicalStructure:
         score_with = score_logical_structure(with_causal)
         score_without = score_logical_structure(without_causal)
         assert score_with >= score_without
+
+
+class TestCompareArgumentStrength:
+    def test_prosecution_stronger(self):
+        from utils.argument_quality import compare_argument_strength
+        pro = {"overall": 0.8, "dimensions": {"evidence_specificity": 0.9, "diversity": 0.7}}
+        defense = {"overall": 0.5, "dimensions": {"evidence_specificity": 0.4, "diversity": 0.6}}
+        result = compare_argument_strength(pro, defense)
+        assert result["overall_winner"] == "prosecution"
+        assert result["prosecution_dimension_wins"] == 1
+        assert result["defense_dimension_wins"] == 1
+        assert result["overall_margin"] == 0.3
+
+    def test_defense_stronger(self):
+        from utils.argument_quality import compare_argument_strength
+        pro = {"overall": 0.4, "dimensions": {"evidence_specificity": 0.3}}
+        defense = {"overall": 0.8, "dimensions": {"evidence_specificity": 0.9}}
+        result = compare_argument_strength(pro, defense)
+        assert result["overall_winner"] == "defense"
+
+    def test_tie(self):
+        from utils.argument_quality import compare_argument_strength
+        pro = {"overall": 0.6, "dimensions": {"a": 0.5}}
+        defense = {"overall": 0.6, "dimensions": {"a": 0.5}}
+        result = compare_argument_strength(pro, defense)
+        assert result["overall_winner"] == "tie"
+        assert result["overall_margin"] == 0.0
+
+    def test_empty_dimensions(self):
+        from utils.argument_quality import compare_argument_strength
+        result = compare_argument_strength({"overall": 0.5, "dimensions": {}}, {"overall": 0.5, "dimensions": {}})
+        assert result["dimensions"] == {}
