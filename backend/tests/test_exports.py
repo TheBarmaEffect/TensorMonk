@@ -129,6 +129,11 @@ class TestMarkdownExport:
         md = generate_markdown_report(SAMPLE_SESSION)
         assert "Analysis & Quality Metrics" not in md
 
+    def test_includes_word_count_and_reading_time(self):
+        md = generate_markdown_report(SAMPLE_SESSION)
+        assert "words" in md
+        assert "min read" in md
+
 
 class TestJSONExport:
     def test_generates_valid_json(self):
