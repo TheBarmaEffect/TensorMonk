@@ -398,14 +398,21 @@ export default function CourtRoom() {
                       const b = new Blob([t], { type: 'text/markdown' }), u = URL.createObjectURL(b), a = document.createElement('a'); a.href = u; a.download = 'verdict-report.md'; a.click(); URL.revokeObjectURL(u)
                     })
                   }} className="flex items-center gap-2 px-4 py-2 rounded-lg text-[12px] font-medium bg-[var(--bg-surface)] text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)] border border-[var(--border)] transition">
-                    📄 Download Report
+                    📄 Markdown
+                  </button>
+                  <button onClick={() => {
+                    fetch(`/api/verdict/${sessionId}/export/pdf`).then(r => r.blob()).then(b => {
+                      const u = URL.createObjectURL(b), a = document.createElement('a'); a.href = u; a.download = 'verdict-report.pdf'; a.click(); URL.revokeObjectURL(u)
+                    })
+                  }} className="flex items-center gap-2 px-4 py-2 rounded-lg text-[12px] font-medium bg-[var(--bg-surface)] text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)] border border-[var(--border)] transition">
+                    📑 PDF Report
                   </button>
                   <button onClick={() => {
                     fetch(`/api/verdict/${sessionId}/export/json`).then(r => r.text()).then(t => {
                       const b = new Blob([t], { type: 'application/json' }), u = URL.createObjectURL(b), a = document.createElement('a'); a.href = u; a.download = 'verdict-data.json'; a.click(); URL.revokeObjectURL(u)
                     })
                   }} className="flex items-center gap-2 px-4 py-2 rounded-lg text-[12px] font-medium bg-[var(--bg-surface)] text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)] border border-[var(--border)] transition">
-                    📋 Export JSON
+                    📋 JSON
                   </button>
                 </motion.div>
 

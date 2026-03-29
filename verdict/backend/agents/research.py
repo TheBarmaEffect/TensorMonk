@@ -1,4 +1,8 @@
-"""Research Agent — produces a neutral research package on the decision topic."""
+"""Research Agent — produces a neutral, anonymous research package on the decision topic.
+
+Constitutional role: Strictly neutral. Authorship is hidden from adversarial agents.
+The research package is the ONLY shared context between Prosecutor and Defense.
+"""
 
 import json
 import logging
@@ -12,7 +16,14 @@ from models.schemas import StreamEvent
 
 logger = logging.getLogger(__name__)
 
-RESEARCH_SYSTEM_PROMPT = """You are a neutral research analyst. Produce a comprehensive, factual research package on the following decision. Include: market context, relevant data points, known precedents, key stakeholders, and risk landscape. Be thorough and neutral.
+RESEARCH_SYSTEM_PROMPT = """You are a neutral research analyst producing anonymous briefing material for an adversarial review process.
+
+CONSTITUTIONAL DIRECTIVE: Remain strictly neutral. Do not advocate for or against any outcome.
+Your authorship is intentionally withheld from the agents who will argue this decision.
+Present only verified facts, relevant data, and documented precedents.
+
+Produce a comprehensive factual research package. Include: market context, relevant data points,
+known precedents, key stakeholders, and risk landscape. Be thorough and impartial.
 
 Output as structured JSON with these exact fields:
 {
@@ -28,7 +39,7 @@ Return ONLY valid JSON. No markdown, no code fences, no extra text."""
 
 
 class ResearchAgent:
-    """Produces a neutral research package shared by both Prosecutor and Defense."""
+    """Produces a neutral, anonymous research package shared by both Prosecutor and Defense."""
 
     def __init__(self) -> None:
         self.llm = ChatGroq(
@@ -42,6 +53,8 @@ class ResearchAgent:
         self,
         decision_question: str,
         context: Optional[str] = None,
+        output_format: str = "executive",
+        domain: str = "business",
         stream_callback: Optional[Callable] = None,
     ) -> dict:
         """Execute research and return a structured research package.
@@ -49,6 +62,8 @@ class ResearchAgent:
         Args:
             decision_question: The decision to research.
             context: Optional additional context.
+            output_format: Output style (executive/technical/legal/investor).
+            domain: Decision domain for context-aware research depth.
             stream_callback: Async callback to emit StreamEvents.
 
         Returns:
@@ -63,9 +78,19 @@ class ResearchAgent:
                 )
             )
 
+        format_instruction = {
+            "executive": "Focus on strategic implications and high-level business impact.",
+            "technical": "Include technical depth, implementation complexity, and architecture considerations.",
+            "legal": "Emphasize regulatory context, legal precedents, and compliance requirements.",
+            "investor": "Highlight market size, growth metrics, competitive landscape, and financial projections.",
+        }.get(output_format, "")
+
         prompt = f"Decision under analysis: {decision_question}"
         if context:
             prompt += f"\n\nAdditional context: {context}"
+        if format_instruction:
+            prompt += f"\n\nFormat guidance: {format_instruction}"
+        prompt += f"\nDomain: {domain}"
 
         messages = [
             SystemMessage(content=RESEARCH_SYSTEM_PROMPT),
@@ -73,7 +98,6 @@ class ResearchAgent:
         ]
 
         try:
-            # Send thinking messages (not raw tokens)
             thinking_phases = [
                 "Scanning market landscape and competitive environment...",
                 "Gathering relevant data points and statistics...",
@@ -94,11 +118,8 @@ class ResearchAgent:
                     import asyncio
                     await asyncio.sleep(0.3)
 
-            # Run LLM (don't stream raw tokens to UI)
             response = await self.llm.ainvoke(messages)
-            full_response = response.content
-
-            research_package = self._parse_response(full_response)
+            research_package = self._parse_response(response.content)
 
             if stream_callback:
                 await stream_callback(
