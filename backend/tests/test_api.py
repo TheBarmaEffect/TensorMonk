@@ -125,6 +125,20 @@ class TestSessionStatus:
         resp = client.get("/api/verdict/nonexistent-id/status")
         assert resp.status_code == 404
 
+    def test_status_includes_progress(self):
+        """Progress tracking should be included in status response."""
+        start = client.post("/api/verdict/start", json={"question": "Should we pivot to enterprise sales?"}).json()
+        resp = client.get(f"/api/verdict/{start['session_id']}/status")
+        data = resp.json()
+        assert "progress" in data
+        progress = data["progress"]
+        assert "progress_pct" in progress
+        assert "current_stage" in progress
+        assert "completed_stages" in progress
+        assert "stages_remaining" in progress
+        assert progress["progress_pct"] == 0.0  # No events yet
+        assert progress["stages_remaining"] == 6  # All 6 stages remaining
+
 
 class TestFormats:
     def test_formats_returns_list(self):

@@ -334,18 +334,95 @@ async def get_history():
     return {"sessions": sorted(history, key=lambda x: x.get("created_at", ""), reverse=True)}
 
 
+# Pipeline node ordering for progress tracking — maps event types to
+# sequential stage indices. Used to compute progress percentage and ETA.
+_PIPELINE_STAGES: list[dict] = [
+    {"name": "research", "event": "research_complete", "weight": 0.15},
+    {"name": "arguments", "event": "defense_complete", "weight": 0.30},
+    {"name": "cross_examination", "event": "judge_start", "weight": 0.10},
+    {"name": "witnesses", "event": "witness_complete", "weight": 0.15},
+    {"name": "verdict", "event": "verdict_complete", "weight": 0.20},
+    {"name": "synthesis", "event": "synthesis_complete", "weight": 0.10},
+]
+_STAGE_EVENTS = {s["event"] for s in _PIPELINE_STAGES}
+
+
+def _compute_progress(session: dict) -> dict:
+    """Compute pipeline progress from session events.
+
+    Analyzes emitted events to determine which pipeline stages have completed,
+    the current active stage, weighted progress percentage, and estimated
+    time remaining based on elapsed time and completion fraction.
+
+    Args:
+        session: The session dict with events list and timestamps.
+
+    Returns:
+        Dict with progress_pct, current_stage, completed_stages, and eta_seconds.
+    """
+    events = session.get("events", [])
+    completed_events = {e.get("event_type") for e in events if isinstance(e, dict)}
+
+    completed_stages = []
+    current_stage = None
+    progress_weight = 0.0
+
+    for stage in _PIPELINE_STAGES:
+        if stage["event"] in completed_events:
+            completed_stages.append(stage["name"])
+            progress_weight += stage["weight"]
+        elif current_stage is None:
+            current_stage = stage["name"]
+
+    progress_pct = round(min(progress_weight * 100, 100), 1)
+
+    # If session is complete, override to 100%
+    if session.get("status") == "complete":
+        progress_pct = 100.0
+        current_stage = None
+
+    # ETA estimation based on elapsed time and progress fraction
+    eta_seconds = None
+    created_at = session.get("created_at")
+    if created_at and 0 < progress_pct < 100:
+        try:
+            start_time = datetime.fromisoformat(created_at)
+            elapsed = (datetime.now() - start_time).total_seconds()
+            fraction = progress_pct / 100.0
+            if fraction > 0:
+                estimated_total = elapsed / fraction
+                eta_seconds = round(max(estimated_total - elapsed, 0), 1)
+        except (ValueError, TypeError):
+            pass
+
+    return {
+        "progress_pct": progress_pct,
+        "current_stage": current_stage,
+        "completed_stages": completed_stages,
+        "stages_remaining": len(_PIPELINE_STAGES) - len(completed_stages),
+        "eta_seconds": eta_seconds,
+    }
+
+
 @router.get("/{session_id}/status")
 async def get_status(session_id: str):
-    """Get the current status of a verdict session."""
+    """Get the current status and progress of a verdict session.
+
+    Returns status, event count, and detailed progress tracking including
+    current pipeline stage, completion percentage, and estimated time remaining.
+    """
     session = _get_session(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
+
+    progress = _compute_progress(session)
 
     return {
         "session_id": session_id,
         "status": session["status"],
         "event_count": len(session["events"]),
         "has_result": session["result"] is not None,
+        "progress": progress,
     }
 
 
