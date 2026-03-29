@@ -41,6 +41,7 @@ from config.domain_config import get_constitutional_overlay, get_evidence_hierar
 from utils.event_bus import pipeline_event_bus, PipelineEvent, EventPriority
 from utils.metrics import pipeline_metrics
 from utils.confidence_calibration import calibration_tracker
+from utils.argument_graph import build_argument_graphs
 
 
 def strip_authorship(research_package: dict) -> dict:
@@ -404,10 +405,18 @@ async def judge_cross_exam_node(state: VerdictState) -> dict:
     def_arg = Argument(**def_data)
     tid = state.get("thread_id", "")
 
+    # Build argument dependency graphs for structural analysis
+    pro_claims = [{"id": c.id, "statement": c.statement, "evidence": c.evidence, "confidence": c.confidence}
+                  for c in pro_arg.claims]
+    def_claims = [{"id": c.id, "statement": c.statement, "evidence": c.evidence, "confidence": c.confidence}
+                  for c in def_arg.claims]
+    graph_analysis = build_argument_graphs(pro_claims, def_claims)
+
     with pipeline_metrics.track("judge_cross_exam"):
         try:
             await pipeline_event_bus.publish(PipelineEvent(
                 topic="agent.judge.cross_exam.start", session_id=tid,
+                payload={"argument_graphs": graph_analysis.get("comparative", {})},
             ))
             contested = await judge.cross_examine(
                 decision_question=decision["question"],
