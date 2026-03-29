@@ -105,15 +105,16 @@ def score_claim_diversity(claims: list[dict]) -> float:
         words = {w.lower() for w in claim.get("statement", "").split() if len(w) > 3}
         keyword_sets.append(words)
 
-    # Compute average pairwise overlap
+    # Compute average pairwise Jaccard distance for diversity
     total_overlap = 0.0
     pair_count = 0
     for i in range(len(keyword_sets)):
         for j in range(i + 1, len(keyword_sets)):
             if keyword_sets[i] and keyword_sets[j]:
-                overlap = len(keyword_sets[i] & keyword_sets[j])
-                min_size = min(len(keyword_sets[i]), len(keyword_sets[j]))
-                total_overlap += overlap / min_size if min_size > 0 else 0.0
+                intersection = len(keyword_sets[i] & keyword_sets[j])
+                union = len(keyword_sets[i] | keyword_sets[j])
+                jaccard_sim = intersection / union if union > 0 else 0.0
+                total_overlap += jaccard_sim
                 pair_count += 1
 
     avg_overlap = total_overlap / pair_count if pair_count > 0 else 0.0
