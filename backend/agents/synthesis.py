@@ -151,6 +151,15 @@ class SynthesisAgent:
                     f"in your recommendations and suggest monitoring triggers.\n"
                 )
 
+            # Add pivotal witness warnings when available
+            pivotal = verdict_stability.get("pivotal_witnesses", [])
+            if pivotal:
+                stability_guidance += (
+                    f"\n  PIVOTAL WITNESSES (removing any one flips the verdict): {pivotal}\n"
+                    f"  Your synthesis should explicitly address the evidence behind "
+                    f"these claims, since the verdict depends on them.\n"
+                )
+
         prompt = (
             f"ORIGINAL DECISION: {decision_question}\n\n"
             f"RESEARCH SUMMARY: {research_package.get('summary', '')}\n\n"
