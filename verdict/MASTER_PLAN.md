@@ -113,10 +113,12 @@ Build a **multi-agent adversarial AI courtroom** that takes any decision or idea
 | TF-IDF weighted claim similarity | ✅ | `compute_tfidf_similarity()` with smoothed IDF replaces naive keyword overlap |
 | Topological sort (Kahn's algorithm) | ✅ | `topological_sort()` for dependency-ordered claim traversal |
 | Platt scaling feedback loop | ✅ | Auto-fit after 10+ records, applies sigmoid correction to raw agent confidence |
+| Cross-graph dependency analysis | ✅ | `CrossGraphAnalyzer` detects shared evidence between opposing sides |
+| Structural entropy scoring | ✅ | Shannon entropy over degree distribution for topology fragility detection |
 | Structural cross-examination | ✅ | Judge receives argument graph critical paths + foundation claims for smarter claim selection |
 | Impact-weighted witness prioritization | ✅ | Contested claims reordered by DAG cascading impact before witness spawning |
 | Stability-aware synthesis | ✅ | Fragile verdicts trigger cautious recommendations with contingency plans |
-| 446 tests (unit + integration) | ✅ | 22 test files (pytest) |
+| 458 tests (unit + integration) | ✅ | 22 test files (pytest) |
 
 ### Pre-Committed Cut Rule
 > "Analytics charts are cut before the courtroom UI is degraded."
@@ -164,11 +166,11 @@ All Tier 2 features were moved to functional status. The courtroom UI was never 
 | test_validators.py | 22 | Question quality, research completeness, format-domain fit |
 | test_event_bus.py | 20 | Pub/sub delivery, topic matching, priority ordering |
 | test_calibration.py | 27 | ECE computation, overconfidence detection, domain tracking, Platt scaling, isotonic regression (PAVA) |
-| test_argument_graph.py | 34 | DAG construction, degree metrics, coherence, cascading impact, TF-IDF similarity, topological sort |
+| test_argument_graph.py | 46 | DAG construction, degree metrics, coherence, cascading impact, TF-IDF similarity, topological sort, cross-graph analysis, structural entropy |
 | test_verdict_stability.py | 24 | Evidence margin, perturbation Monte Carlo, flip rate bounds, sensitivity analysis |
 | test_argument_quality.py | 24 | Specificity, diversity, calibration, coherence, grading |
 | test_llm_helpers.py | 23 | JSON parsing, code fence stripping, thinking phases, LLM factory, low-temp retry |
-| **Total** | **446** | |
+| **Total** | **458** | |
 
 ## Technical Decisions
 

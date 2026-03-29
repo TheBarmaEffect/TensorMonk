@@ -11,10 +11,17 @@ All notable changes to the Verdict project.
 - **Stop Word Filtering**: Argument graph keyword extraction now filters 50+ English stop words for cleaner similarity computation.
 - **Platt Scaling Feedback Loop**: `_calibrate_from_witnesses()` now auto-fits Platt scaling coefficients after accumulating 10+ calibration records per agent. `calibrate_confidence()` then applies the learned sigmoid correction to raw agent confidence scores during verdict computation — closing the calibration loop from measurement to correction.
 
+### Added — Graph-Theoretic Analysis
+- **Cross-Graph Dependency Analysis**: `CrossGraphAnalyzer` detects claims from opposing sides that reference the same underlying facts. Classifies pairs as contested_territory, contradictory_foundations, or foundation_attack via TF-IDF cosine similarity.
+- **Structural Entropy**: Shannon entropy over normalized degree distribution measures dependency evenness. Low entropy (star topology) = fragile central claims; high entropy (mesh topology) = robust distributed dependencies.
+- **Pivotal Witness Synthesis Wiring**: Sensitivity analysis results (pivotal witnesses, fragility score) propagated through VerdictState to synthesis agent for targeted recommendations.
+
 ### Testing
-- 446 total tests across 22 test files (up from 426)
+- 458 total tests across 22 test files (up from 426)
 - Added 7 sensitivity analysis tests (pivotal detection, fragility scoring, leave-one-out)
-- Added 11 argument graph tests (TF-IDF similarity, topological sort, stop words)
+- Added 11 TF-IDF and topological sort tests
+- Added 5 cross-graph analysis tests (shared evidence, contradictory foundations)
+- Added 7 structural entropy tests (star topology, chain, bounds)
 - Added 2 Platt scaling wiring tests (auto-fit threshold, confidence correction)
 
 ## [1.3.0] — 2026-03-29

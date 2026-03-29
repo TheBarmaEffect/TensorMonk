@@ -736,6 +736,7 @@ async def _run_verdict(state: VerdictState, use_low_temp: bool = False) -> dict:
             ))
             # Store stability in state — synthesis uses this to gauge how
             # cautious its recommendations should be.
+            sensitivity_data = stability.get("sensitivity", {})
             return {
                 "verdict": verdict.model_dump(mode="json"),
                 "verdict_stability": {
@@ -743,6 +744,8 @@ async def _run_verdict(state: VerdictState, use_low_temp: bool = False) -> dict:
                     "verdict_is_robust": stability["verdict_is_robust"],
                     "evidence_margin": stability.get("evidence_margin", {}).get("classification", "unknown"),
                     "flip_rate": stability.get("perturbation_stability", {}).get("flip_count", 0),
+                    "pivotal_witnesses": sensitivity_data.get("pivotal_witnesses", []),
+                    "fragility_score": sensitivity_data.get("fragility_score", 0.0),
                 },
             }
         except Exception as e:

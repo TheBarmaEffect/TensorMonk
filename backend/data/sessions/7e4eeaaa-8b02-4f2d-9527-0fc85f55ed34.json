@@ -1,0 +1,1 @@
+{"id": "7e4eeaaa-8b02-4f2d-9527-0fc85f55ed34", "decision": {"id": "7e4eeaaa-8b02-4f2d-9527-0fc85f55ed34", "question": "Should we adopt microservices?", "context": null, "created_at": "2026-03-29T17:08:41.030579"}, "output_format": "executive", "domain": "business", "status": "created", "events": [], "result": null, "created_at": "2026-03-29T17:08:41.030597"}
