@@ -3,7 +3,17 @@ import useVerdictStore from '../store/verdictStore'
 
 const API_BASE = '/api/verdict'
 
+// WebSocket connects directly to backend (Vercel rewrites don't proxy WS).
+// In production, VITE_WS_URL points to the Railway backend; locally it
+// uses the same host as the page (Vite proxy handles it).
+const WS_BACKEND = import.meta.env.VITE_WS_URL || ''
+
 function getWsUrl(sessionId) {
+  if (WS_BACKEND) {
+    const protocol = WS_BACKEND.startsWith('https') ? 'wss:' : 'ws:'
+    const host = WS_BACKEND.replace(/^https?:\/\//, '')
+    return `${protocol}//${host}${API_BASE}/${sessionId}/stream`
+  }
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
   return `${protocol}//${window.location.host}${API_BASE}/${sessionId}/stream`
 }
