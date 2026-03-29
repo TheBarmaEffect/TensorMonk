@@ -355,3 +355,58 @@ class TestCrossGraphAnalysis:
         result = build_argument_graphs(pro, defense)
         assert "cross_graph" in result
         assert "pair_count" in result["cross_graph"]
+
+
+class TestStructuralEntropy:
+    """Test Shannon entropy over degree distribution."""
+
+    def test_empty_graph_zero_entropy(self):
+        g = ArgumentGraph()
+        assert g.structural_entropy() == 0.0
+
+    def test_single_node_zero_entropy(self):
+        g = ArgumentGraph()
+        g.add_claim("c1", "A", "ev", 0.9)
+        assert g.structural_entropy() == 0.0
+
+    def test_no_edges_max_entropy(self):
+        """Graph with no edges has trivially uniform distribution."""
+        g = ArgumentGraph()
+        g.add_claim("c1", "A", "ev", 0.9)
+        g.add_claim("c2", "B", "ev", 0.7)
+        assert g.structural_entropy() == 1.0
+
+    def test_star_topology_low_entropy(self):
+        """Star: one node connects to all others → low entropy."""
+        g = ArgumentGraph()
+        g.add_claim("hub", "Hub", "ev", 0.9)
+        for i in range(4):
+            g.add_claim(f"leaf_{i}", f"Leaf {i}", "ev", 0.5)
+            g.add_dependency(f"leaf_{i}", "hub")
+        # Hub has degree 4, leaves have degree 1 → uneven distribution
+        entropy = g.structural_entropy()
+        assert entropy < 0.9  # Should be lower than uniform
+
+    def test_chain_moderate_entropy(self):
+        """Linear chain has moderate entropy — degrees are 1 or 2."""
+        g = ArgumentGraph()
+        g.add_claim("c1", "A", "ev", 0.9)
+        g.add_claim("c2", "B", "ev", 0.7)
+        g.add_claim("c3", "C", "ev", 0.5)
+        g.add_dependency("c2", "c1")
+        g.add_dependency("c3", "c2")
+        entropy = g.structural_entropy()
+        assert 0.0 < entropy <= 1.0
+
+    def test_entropy_bounded(self):
+        g = ArgumentGraph()
+        g.add_claim("c1", "A", "ev", 0.9)
+        g.add_claim("c2", "B", "ev", 0.7)
+        g.add_dependency("c2", "c1")
+        assert 0.0 <= g.structural_entropy() <= 1.0
+
+    def test_included_in_metrics(self):
+        g = ArgumentGraph()
+        g.add_claim("c1", "A", "ev", 0.9)
+        m = g.metrics()
+        assert "structural_entropy" in m

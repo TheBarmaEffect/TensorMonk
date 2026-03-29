@@ -168,6 +168,44 @@ class ArgumentGraph:
             if self.in_degree(cid) == max_in
         ]
 
+    def structural_entropy(self) -> float:
+        """Compute the structural entropy of the argument graph.
+
+        Uses Shannon entropy over the normalized degree distribution to
+        measure how evenly dependencies are distributed across claims.
+
+        Low entropy: a few claims carry all the dependencies (star topology)
+            → fragile, high-impact if a central claim is overruled
+        High entropy: dependencies are evenly distributed (mesh topology)
+            → robust, no single point of failure
+
+        Returns:
+            Entropy value in [0.0, log2(n)]. Normalized to [0.0, 1.0].
+        """
+        if len(self._node_data) <= 1:
+            return 0.0
+
+        # Total degree (in + out) per node
+        degrees = []
+        for cid in self._node_data:
+            total_deg = self.in_degree(cid) + self.out_degree(cid)
+            degrees.append(total_deg)
+
+        total = sum(degrees)
+        if total == 0:
+            return 1.0  # No edges → perfectly "distributed" (trivially)
+
+        # Shannon entropy of normalized degree distribution
+        entropy = 0.0
+        for d in degrees:
+            if d > 0:
+                p = d / total
+                entropy -= p * math.log2(p)
+
+        # Normalize by max possible entropy (uniform distribution)
+        max_entropy = math.log2(len(degrees))
+        return round(entropy / max_entropy, 4) if max_entropy > 0 else 0.0
+
     def coherence_score(self) -> float:
         """Measure argument coherence as fraction of nodes in the largest component.
 
@@ -260,6 +298,7 @@ class ArgumentGraph:
             "node_count": len(self._node_data),
             "edge_count": total_edges,
             "coherence": self.coherence_score(),
+            "structural_entropy": self.structural_entropy(),
             "foundation_claims": self.foundation_claims,
             "critical_claims": self.critical_claims,
             "vulnerable_claims": self.vulnerable_claims,
