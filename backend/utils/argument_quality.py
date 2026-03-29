@@ -343,3 +343,53 @@ def score_argument_quality(argument_data: dict) -> dict[str, Any]:
     )
 
     return result
+
+
+def compare_argument_strength(pro_quality: dict, def_quality: dict) -> dict:
+    """Compare prosecution vs defense argument strength across all dimensions.
+
+    Produces a per-dimension comparison showing which side is stronger
+    in each area, plus an overall winner determination.
+
+    Args:
+        pro_quality: Prosecution quality scores from score_argument_quality().
+        def_quality: Defense quality scores from score_argument_quality().
+
+    Returns:
+        Dict with per-dimension winners, overall winner, and margin.
+    """
+    pro_dims = pro_quality.get("dimensions", {})
+    def_dims = def_quality.get("dimensions", {})
+
+    all_dims = set(list(pro_dims.keys()) + list(def_dims.keys()))
+    dimension_comparison = {}
+    pro_wins = 0
+    def_wins = 0
+
+    for dim in sorted(all_dims):
+        pro_score = pro_dims.get(dim, 0.0)
+        def_score = def_dims.get(dim, 0.0)
+        if pro_score > def_score:
+            winner = "prosecution"
+            pro_wins += 1
+        elif def_score > pro_score:
+            winner = "defense"
+            def_wins += 1
+        else:
+            winner = "tie"
+        dimension_comparison[dim] = {
+            "prosecution": round(pro_score, 3),
+            "defense": round(def_score, 3),
+            "winner": winner,
+            "margin": round(abs(pro_score - def_score), 3),
+        }
+
+    overall_winner = "prosecution" if pro_wins > def_wins else "defense" if def_wins > pro_wins else "tie"
+
+    return {
+        "dimensions": dimension_comparison,
+        "prosecution_dimension_wins": pro_wins,
+        "defense_dimension_wins": def_wins,
+        "overall_winner": overall_winner,
+        "overall_margin": round(abs(pro_quality.get("overall", 0) - def_quality.get("overall", 0)), 3),
+    }
