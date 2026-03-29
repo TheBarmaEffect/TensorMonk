@@ -62,11 +62,17 @@ class WitnessAgent:
 
         system_prompt = WITNESS_SYSTEM.format(witness_type=witness_type)
 
+        type_instruction = {
+            "fact": "Focus on factual accuracy — check for verifiable assertions, logical consistency, and source reliability.",
+            "data": "Focus on data quality — check statistical validity, sample sizes, methodology, and potential biases.",
+            "precedent": "Focus on precedent relevance — check if cited precedents are applicable, recent, and correctly interpreted.",
+        }.get(witness_type, "Verify this claim thoroughly.")
+
         prompt = (
             f"CLAIM TO VERIFY:\n"
             f"Statement: {claim_statement}\n"
             f"Evidence provided: {claim_evidence}\n\n"
-            f"Verify this claim thoroughly."
+            f"{type_instruction}"
         )
 
         messages = [
