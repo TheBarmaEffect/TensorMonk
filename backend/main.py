@@ -19,6 +19,7 @@ from middleware.rate_limiter import RateLimiterMiddleware
 from middleware.request_timing import RequestTimingMiddleware
 from middleware.security import SecurityMiddleware
 from utils.metrics import pipeline_metrics
+from utils.event_bus import pipeline_event_bus
 
 # Configure logging
 logging.basicConfig(
@@ -110,8 +111,14 @@ async def health():
 
 @app.get("/metrics")
 async def metrics():
-    """Pipeline performance metrics endpoint for monitoring."""
-    return pipeline_metrics.summary()
+    """Pipeline performance metrics endpoint for monitoring.
+
+    Returns per-agent timing, success/failure counts, and event bus stats.
+    """
+    return {
+        **pipeline_metrics.summary(),
+        "event_bus": pipeline_event_bus.stats,
+    }
 
 
 @app.on_event("startup")
@@ -131,6 +138,7 @@ async def on_startup():
 async def on_shutdown():
     """Graceful shutdown — log and clean up resources."""
     uptime = round(time.monotonic() - _startup_time)
+    await pipeline_event_bus.shutdown()
     logger.info("Verdict API shutting down after %ds uptime", uptime)
 
 
