@@ -1,0 +1,122 @@
+# Verdict — Master Plan
+
+## Vision
+
+Build a **multi-agent adversarial AI courtroom** that takes any decision or idea and stress-tests it through a full legal proceeding — research, prosecution, defense, cross-examination, witness testimony, verdict, and synthesis — producing a battle-tested version of the original idea.
+
+## Architecture Principles
+
+### 1. Adversarial Isolation (ADR-001)
+- Prosecutor and Defense run in **parallel** and **never see each other's output**
+- Research authorship is **stripped** before reaching adversarial agents (authorship blindness)
+- Constitutional directives force Prosecutor to argue FOR and Defense to argue AGAINST
+
+### 2. Confidence-Based Routing (ADR-002)
+- Three verdict paths: normal, low-confidence review (human-in-the-loop), hallucination guard
+- Witness confidence < 0.6 triggers `interrupt_before` for human review
+- Confidence > 0.9 with majority overruled triggers low-temperature retry
+
+### 3. Domain-Aware Overlays (ADR-003)
+- Domain classification via LLM with TTL caching
+- Per-domain constitutional overlays, evidence hierarchies, synthesis anchors
+- 6+ domains: business, financial, legal, medical, technology, hiring
+
+## Delivery Tiers
+
+### Tier 1 — Core Courtroom (COMPLETE)
+| Feature | Status | Evidence |
+|---------|--------|----------|
+| 6 AI agents (Research, Prosecutor, Defense, Judge, Witness, Synthesis) | ✅ | `backend/agents/*.py` |
+| LangGraph StateGraph with conditional edges | ✅ | `backend/graph/verdict_graph.py` |
+| Constitutional isolation + authorship blindness | ✅ | `strip_authorship()` removes 11 fields |
+| Dynamic witness spawning | ✅ | `_should_spawn_witnesses()` conditional edge |
+| Confidence-based 3-path verdict routing | ✅ | `_confidence_gate()` in verdict_graph.py |
+| Pydantic v2 schema validation + hallucination guard | ✅ | `backend/models/schemas.py` |
+| Real-time WebSocket streaming | ✅ | `StreamEvent` objects via FastAPI WS |
+| 5-Act courtroom UI | ✅ | `frontend/src/components/CourtRoom.jsx` |
+| Speech-bubble debate layout | ✅ | Prosecutor LEFT, Defense RIGHT |
+| Framer Motion ACT transitions | ✅ | `ActDivider` with scaleX entrance |
+| Domain detection + format selector | ✅ | LLM-powered with 4 output formats |
+| Export pipeline (MD, PDF, DOCX, JSON) | ✅ | `backend/services/export_service.py` |
+| Follow-up Q&A | ✅ | `POST /api/verdict/{id}/followup` |
+
+### Tier 2 — Production Polish (COMPLETE)
+| Feature | Status | Evidence |
+|---------|--------|----------|
+| Recharts analytics panel | ✅ | `AnalyticsPanel.jsx` wired to live data |
+| Session persistence (JSON file store) | ✅ | `data/sessions/` with in-memory cache |
+| Voice input (Web Speech API) | ✅ | `MicButton.jsx` + `useVoiceInput.js` |
+| Verdict sharing URL | ✅ | SHA256 token via `GET /{id}/share` |
+| DOCX export | ✅ | `python-docx` with styled headings |
+| Comparison mode (side-by-side) | ✅ | `ComparisonMode.jsx` |
+| Domain-specific PDF themes (9 domains) | ✅ | `DOMAIN_PDF_THEMES` with accent colors |
+| WebSocket reconnection with backoff | ✅ | 5 attempts, exponential + jitter |
+| Web search grounding (Tavily/DDG) | ✅ | `_web_search_grounding()` in research.py |
+
+### Tier 3 — Infrastructure & Resilience (COMPLETE)
+| Feature | Status | Evidence |
+|---------|--------|----------|
+| Rate limiting middleware | ✅ | Token bucket per-IP in `middleware/rate_limiter.py` |
+| Request timing + correlation IDs | ✅ | X-Request-ID, X-Response-Time headers |
+| Retry with exponential backoff | ✅ | Wired into all 5 agent LLM calls |
+| Circuit breaker | ✅ | 3-state (CLOSED/OPEN/HALF_OPEN) |
+| TTL cache for domain detection | ✅ | Wired into detect-domain endpoint |
+| Pipeline performance metrics | ✅ | `/metrics` endpoint with per-agent stats |
+| Structured error hierarchy | ✅ | VerdictError → AgentError/SessionError/ExportError |
+| Input validation | ✅ | Pydantic field_validator on all API models |
+| Deep health checks | ✅ | Groq, Redis, session store, uptime |
+| Structured logging | ✅ | contextvars session correlation IDs |
+| 106 unit tests | ✅ | 10 test files (pytest) |
+
+### Pre-Committed Cut Rule
+> "Analytics charts are cut before the courtroom UI is degraded."
+
+All Tier 2 features were moved to functional status. The courtroom UI was never degraded.
+
+## Deployment Architecture
+
+```
+[User Browser]
+    |
+    v
+[Vercel CDN] ── serves React SPA
+    |
+    ├── /api/* ── rewrites to ──> [HF Spaces Backend]
+    |                              (FastAPI + Docker)
+    |
+    └── wss:// ── direct ──> [HF Spaces Backend]
+                              (WebSocket streaming)
+```
+
+- **Frontend**: Vercel (https://frontend-phi-ten-83.vercel.app)
+- **Backend**: Hugging Face Spaces (https://shani987-verdict-api.hf.space)
+- **Local**: Docker Compose with Redis service
+
+## Test Strategy
+
+| Test File | Count | Scope |
+|-----------|-------|-------|
+| test_schemas.py | 11 | Pydantic model validation, confidence bounds |
+| test_graph.py | 15 | Graph topology, strip_authorship, conditional edges |
+| test_api.py | 19 | API contracts, input validation, domain detection |
+| test_exports.py | 11 | PDF/DOCX/MD/JSON generation, domain themes |
+| test_resilience.py | 12 | Retry backoff, circuit breaker states |
+| test_cache.py | 10 | TTL expiration, key normalization, eviction |
+| test_middleware.py | 7 | Token bucket algorithm, exempt paths |
+| test_domain_config.py | 4 | YAML loading, constitutional overlays |
+| test_errors.py | 10 | Error hierarchy, JSON serialization |
+| test_metrics.py | 7 | Agent tracking, pipeline metrics |
+| **Total** | **106** | |
+
+## Technical Decisions
+
+1. **Groq over OpenAI**: Llama 3.3 70B via Groq for speed (sub-second inference) and free tier
+2. **LangGraph over raw chains**: StateGraph provides checkpointing, conditional edges, parallel execution
+3. **Zustand over Redux**: Lightweight state management matches React 18 patterns
+4. **fpdf2 over WeasyPrint**: No system dependency on wkhtmltopdf; pure Python PDF generation
+5. **In-memory rate limiter over Redis**: No additional infrastructure dependency
+6. **JSON file persistence over SQLite**: Simpler deployment, human-readable session data
+
+---
+
+*Verdict — every decision deserves a challenger.*
