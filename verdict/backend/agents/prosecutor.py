@@ -12,6 +12,7 @@ from langchain_groq import ChatGroq
 from langchain_core.messages import SystemMessage, HumanMessage
 
 from config import settings
+from config.domain_config import get_constitutional_overlay, get_evidence_hierarchy
 from models.schemas import Argument, Claim, StreamEvent
 
 logger = logging.getLogger(__name__)
@@ -88,18 +89,13 @@ class ProsecutorAgent:
             "investor": "Highlight ROI potential, market size, growth trajectory, and competitive moat.",
         }.get(output_format, "")
 
-        # Domain-aware constitutional overlay — adapts argumentation constraints per domain
-        domain_overlay = {
-            "business": "Cite market data, revenue projections, and competitive benchmarks.",
-            "financial": "Reference financial models, valuation multiples, and capital efficiency metrics.",
-            "legal": "Ground arguments in statutory authority, case law, and regulatory frameworks.",
-            "medical": "Reference clinical evidence, FDA guidance, and patient outcome data.",
-            "hiring": "Focus on talent market data, compensation benchmarks, and org-design patterns.",
-            "technology": "Cite architecture precedents, scalability benchmarks, and migration success rates.",
-            "strategic": "Reference M&A precedents, synergy analyses, and integration frameworks.",
-            "product": "Cite user research, PMF signals, and comparable product launches.",
-            "marketing": "Reference CAC/LTV benchmarks, channel performance data, and brand studies.",
-        }.get(domain, "")
+        # Domain-aware constitutional overlay — loaded from YAML config at runtime.
+        # Each domain defines argumentation constraints, evidence hierarchy, and
+        # synthesis anchors in backend/config/domains.yaml.
+        domain_overlay = get_constitutional_overlay(domain)
+        evidence_types = get_evidence_hierarchy(domain)
+        if evidence_types:
+            domain_overlay += f"\nPrioritize evidence in this order: {', '.join(evidence_types)}."
 
         prompt = (
             f"Decision: {decision_question}\n"
