@@ -115,7 +115,7 @@ User Input (question + context + output_format)
 - Session history: persistent JSON-backed session store via `GET /api/verdict/sessions/history`, displayed in frontend `SessionHistory` component
 - Verdict sharing: `GET /api/verdict/{id}/share` generates short URL token, `GET /shared/{token}` retrieves results
 - Web search grounding: Research Agent queries Tavily (or DuckDuckGo fallback) for current facts before LLM analysis
-- 172 tests across 14 test files: schemas, graph topology, API contracts, exports, resilience, cache, middleware, domain config, error types, pipeline metrics, security, prompts, integration, graph visualization (pytest)
+- 212 tests across 15 test files: schemas, graph topology, API contracts, exports, resilience, cache, middleware, domain config, error types, pipeline metrics, security, prompts, integration, graph visualization, session FSM (pytest)
 - Input validation on all API request models (question length, context length, format enum)
 - Rate limiting middleware: token bucket per IP with configurable RPM/burst
 - Request timing middleware: X-Request-ID + X-Response-Time headers on all responses
