@@ -38,6 +38,7 @@ from agents.witness import WitnessAgent
 from agents.synthesis import SynthesisAgent
 from models.schemas import StreamEvent
 from config.domain_config import get_constitutional_overlay, get_evidence_hierarchy
+from utils.event_bus import pipeline_event_bus, PipelineEvent, EventPriority
 
 
 def strip_authorship(research_package: dict) -> dict:
@@ -627,9 +628,38 @@ async def run_verdict_graph(
 
     logger.info("Starting verdict graph for decision: %s", decision.get("question", "")[:80])
 
+    # Emit pipeline start event for observability
+    await pipeline_event_bus.publish(PipelineEvent(
+        topic="pipeline.start",
+        payload={"decision_id": decision.get("id", ""), "domain": domain, "format": output_format},
+        session_id=tid,
+        priority=EventPriority.HIGH,
+    ))
+
     try:
         result = await compiled.ainvoke(initial_state, config=config)
         logger.info("Verdict graph complete. Errors: %s", result.get("errors", []))
+
+        # Emit pipeline complete event
+        await pipeline_event_bus.publish(PipelineEvent(
+            topic="pipeline.complete",
+            payload={
+                "decision_id": decision.get("id", ""),
+                "ruling": result.get("verdict", {}).get("ruling") if result.get("verdict") else None,
+                "error_count": len(result.get("errors", [])),
+            },
+            session_id=tid,
+            priority=EventPriority.HIGH,
+        ))
+
         return result
+    except Exception as e:
+        await pipeline_event_bus.publish(PipelineEvent(
+            topic="pipeline.error",
+            payload={"error": str(e)},
+            session_id=tid,
+            priority=EventPriority.CRITICAL,
+        ))
+        raise
     finally:
         _callback_registry.pop(tid, None)
