@@ -123,7 +123,81 @@ class JudgeAgent:
             },
             "strength_differential": round(pro_avg - def_avg, 3),
             "total_claims": len(pro_confs) + len(def_confs),
+            "claim_overlaps": self.detect_claim_overlaps(
+                prosecutor_argument, defense_argument,
+            ),
         }
+
+    def detect_claim_overlaps(
+        self,
+        prosecutor_argument: Argument,
+        defense_argument: Argument,
+        overlap_threshold: float = 0.3,
+    ) -> list[dict]:
+        """Detect overlapping claims between prosecution and defense.
+
+        Uses keyword overlap analysis to find claims that address the same
+        underlying topic from opposing sides. High-overlap claim pairs
+        represent the strongest contested points — they should be prioritized
+        for witness verification during cross-examination.
+
+        The overlap score is computed as:
+            |significant_words_A ∩ significant_words_B| / min(|A|, |B|)
+
+        where significant words are those with length > 3 (filtering out
+        stop words, articles, prepositions).
+
+        Args:
+            prosecutor_argument: The prosecution's case.
+            defense_argument: The defense's case.
+            overlap_threshold: Minimum overlap score to consider claims related.
+
+        Returns:
+            List of overlap dicts with claim IDs, overlap score, and shared keywords.
+        """
+        overlaps = []
+
+        for pro_claim in prosecutor_argument.claims:
+            pro_words = {
+                w.lower() for w in pro_claim.statement.split()
+                if len(w) > 3
+            }
+            if not pro_words:
+                continue
+
+            for def_claim in defense_argument.claims:
+                def_words = {
+                    w.lower() for w in def_claim.statement.split()
+                    if len(w) > 3
+                }
+                if not def_words:
+                    continue
+
+                shared = pro_words & def_words
+                min_size = min(len(pro_words), len(def_words))
+                overlap_score = len(shared) / min_size if min_size > 0 else 0.0
+
+                if overlap_score >= overlap_threshold:
+                    overlaps.append({
+                        "prosecutor_claim_id": pro_claim.id,
+                        "defense_claim_id": def_claim.id,
+                        "overlap_score": round(overlap_score, 3),
+                        "shared_keywords": sorted(shared),
+                        "confidence_gap": round(
+                            abs(pro_claim.confidence - def_claim.confidence), 3
+                        ),
+                    })
+
+        # Sort by overlap score descending — highest conflict first
+        overlaps.sort(key=lambda x: x["overlap_score"], reverse=True)
+
+        if overlaps:
+            logger.info(
+                "Detected %d claim overlaps (top overlap: %.2f)",
+                len(overlaps), overlaps[0]["overlap_score"],
+            )
+
+        return overlaps
 
     async def cross_examine(
         self,

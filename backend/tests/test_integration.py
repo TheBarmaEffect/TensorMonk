@@ -200,3 +200,169 @@ class TestInputValidationIntegration:
         question = "x" * 2001
         resp = client.post("/api/verdict/start", json={"question": question})
         assert resp.status_code == 422
+
+
+class TestJudgeClaimOverlap:
+    """Test claim overlap detection in the Judge agent."""
+
+    def _make_claim(self, id, statement, confidence=0.8):
+        from models.schemas import Claim
+        return Claim(id=id, statement=statement, evidence="test", confidence=confidence)
+
+    def _make_arg(self, agent, claims, confidence=0.8):
+        from models.schemas import Argument
+        return Argument(agent=agent, opening="test", claims=claims, confidence=confidence)
+
+    def test_detects_overlapping_claims(self):
+        """Claims with shared keywords should be detected as overlapping."""
+        from agents.judge import JudgeAgent
+        judge = JudgeAgent()
+        pro = self._make_arg("prosecutor", [
+            self._make_claim("p1", "The market opportunity for cloud computing is massive and growing"),
+        ])
+        defense = self._make_arg("defense", [
+            self._make_claim("d1", "The market for cloud computing is saturated with competitors"),
+        ])
+        overlaps = judge.detect_claim_overlaps(pro, defense)
+        assert len(overlaps) >= 1
+        assert overlaps[0]["overlap_score"] > 0.3
+
+    def test_no_overlap_for_unrelated_claims(self):
+        """Unrelated claims should not produce overlaps."""
+        from agents.judge import JudgeAgent
+        judge = JudgeAgent()
+        pro = self._make_arg("prosecutor", [
+            self._make_claim("p1", "Revenue growth exceeds projections quarterly"),
+        ])
+        defense = self._make_arg("defense", [
+            self._make_claim("d1", "Technical debt threatens infrastructure stability"),
+        ])
+        overlaps = judge.detect_claim_overlaps(pro, defense)
+        assert len(overlaps) == 0
+
+    def test_overlap_includes_shared_keywords(self):
+        """Overlap results should include the shared keyword set."""
+        from agents.judge import JudgeAgent
+        judge = JudgeAgent()
+        pro = self._make_arg("prosecutor", [
+            self._make_claim("p1", "Enterprise customers demand robust security features"),
+        ])
+        defense = self._make_arg("defense", [
+            self._make_claim("d1", "Building enterprise security features requires years of investment"),
+        ])
+        overlaps = judge.detect_claim_overlaps(pro, defense)
+        if overlaps:
+            assert "shared_keywords" in overlaps[0]
+            assert len(overlaps[0]["shared_keywords"]) > 0
+
+    def test_overlap_sorted_by_score(self):
+        """Multiple overlaps should be sorted by score descending."""
+        from agents.judge import JudgeAgent
+        judge = JudgeAgent()
+        pro = self._make_arg("prosecutor", [
+            self._make_claim("p1", "The technology stack scales well"),
+            self._make_claim("p2", "Market share growth indicates strong demand from enterprise customers"),
+        ])
+        defense = self._make_arg("defense", [
+            self._make_claim("d1", "Technology stack scaling requires significant investment"),
+            self._make_claim("d2", "Enterprise customers have slow procurement cycles"),
+        ])
+        overlaps = judge.detect_claim_overlaps(pro, defense)
+        if len(overlaps) >= 2:
+            assert overlaps[0]["overlap_score"] >= overlaps[1]["overlap_score"]
+
+    def test_confidence_gap_included(self):
+        """Overlap should include confidence gap between opposing claims."""
+        from agents.judge import JudgeAgent
+        judge = JudgeAgent()
+        pro = self._make_arg("prosecutor", [
+            self._make_claim("p1", "Market demand strong growth", confidence=0.9),
+        ])
+        defense = self._make_arg("defense", [
+            self._make_claim("d1", "Market demand declining growth", confidence=0.6),
+        ])
+        overlaps = judge.detect_claim_overlaps(pro, defense, overlap_threshold=0.2)
+        if overlaps:
+            assert overlaps[0]["confidence_gap"] == 0.3
+
+
+class TestResearchQuality:
+    """Test research quality scoring integration."""
+
+    def test_quality_scoring_all_fields(self):
+        """Full research package should score high on breadth."""
+        from agents.research import ResearchAgent
+        agent = ResearchAgent()
+        pkg = {
+            "market_context": "Large market",
+            "key_data_points": ["fact1 (source: http://example.com)", "fact2", "fact3"],
+            "precedents": ["precedent1", "precedent2"],
+            "stakeholders": ["stakeholder1"],
+            "risk_landscape": ["risk1", "risk2"],
+            "summary": "A comprehensive summary of the research findings covering multiple dimensions of the market.",
+        }
+        scores = agent.score_research_quality(pkg)
+        assert scores["breadth"] == 1.0
+        assert scores["balance"] == 1.0
+        assert scores["overall"] > 0.5
+
+    def test_quality_grounding_detection(self):
+        """Should detect web-sourced data points."""
+        from agents.research import ResearchAgent
+        agent = ResearchAgent()
+        pkg = {
+            "market_context": "test",
+            "key_data_points": [
+                "Market is $50B (source: http://statista.com)",
+                "Growing 15% YoY (source: http://gartner.com)",
+            ],
+            "precedents": [],
+            "stakeholders": [],
+            "risk_landscape": [],
+            "summary": "test",
+        }
+        scores = agent.score_research_quality(pkg)
+        assert scores["grounding"] == 1.0
+
+    def test_quality_empty_package(self):
+        """Empty package should score low."""
+        from agents.research import ResearchAgent
+        agent = ResearchAgent()
+        scores = agent.score_research_quality({})
+        assert scores["breadth"] == 0.0
+        assert scores["overall"] < 0.3
+
+
+class TestSynthesisCoverage:
+    """Test synthesis coverage assessment."""
+
+    def test_coverage_when_objections_addressed(self):
+        """Should detect addressed objections via keyword overlap."""
+        from agents.synthesis import SynthesisAgent
+        from models.schemas import Argument, Claim, Synthesis
+        agent = SynthesisAgent()
+
+        defense = Argument(
+            agent="defense",
+            opening="Against",
+            claims=[Claim(id="d1", statement="The market competition is fierce and established", evidence="ev", confidence=0.8)],
+            confidence=0.7,
+        )
+        pro = Argument(
+            agent="prosecutor",
+            opening="For",
+            claims=[Claim(id="p1", statement="Strong growth", evidence="ev", confidence=0.85)],
+            confidence=0.85,
+        )
+        synth = Synthesis(
+            decision_id="test",
+            improved_idea="Better version",
+            addressed_objections=["The market competition concern is addressed by focusing on niche segments where established players are weak"],
+            recommended_actions=["Within 2 weeks, launch pilot program"],
+            strength_score=0.8,
+        )
+
+        coverage = agent.assess_synthesis_coverage(synth, defense, pro)
+        assert coverage["objection_coverage"] > 0
+        assert coverage["has_time_bounds"] is True
+        assert coverage["strength_delta"] == pytest.approx(0.8 - 0.85, abs=0.01)
