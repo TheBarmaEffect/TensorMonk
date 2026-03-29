@@ -149,8 +149,16 @@ class PipelineMetrics:
         total_successes = sum(self._agent_success.values())
         total_failures = sum(self._agent_failure.values())
 
+        # Identify the bottleneck agent (highest p95 latency)
+        bottleneck = max(
+            agent_stats.items(),
+            key=lambda kv: kv[1]["p95_duration_ms"],
+            default=(None, {}),
+        ) if agent_stats else (None, {})
+
         return {
             "agents": agent_stats,
+            "bottleneck_agent": bottleneck[0],
             "pipeline": {
                 "total_runs": self._pipeline_count,
                 "avg_duration_ms": round(
