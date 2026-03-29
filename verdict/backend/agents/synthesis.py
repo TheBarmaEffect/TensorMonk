@@ -8,6 +8,7 @@ from langchain_groq import ChatGroq
 from langchain_core.messages import SystemMessage, HumanMessage
 
 from config import settings
+from config.domain_config import get_synthesis_anchors, get_suggested_format
 from models.schemas import (
     Argument,
     WitnessReport,
@@ -53,6 +54,7 @@ class SynthesisAgent:
         witness_reports: list[WitnessReport],
         verdict: VerdictResult,
         output_format: str = "executive",
+        domain: str = "business",
         stream_callback: Optional[Callable] = None,
     ) -> Synthesis:
         """Synthesize an improved idea from the full proceeding.
@@ -92,6 +94,18 @@ class SynthesisAgent:
         pro_claims = [{"statement": c.statement, "evidence": c.evidence} for c in prosecutor_argument.claims]
         def_claims = [{"statement": c.statement, "evidence": c.evidence} for c in defense_argument.claims]
 
+        # Few-shot synthesis anchors — domain-specific action examples loaded
+        # from YAML config at runtime to ground recommended_actions in reality
+        anchors = get_synthesis_anchors(domain)
+        anchor_block = ""
+        if anchors:
+            anchor_block = (
+                "\n\nFEW-SHOT ACTION EXAMPLES (for this domain):\n"
+                + "\n".join(f"  - {a}" for a in anchors)
+                + "\n\nUse these as stylistic anchors for your recommended_actions. "
+                "Produce similarly concrete, time-bound steps."
+            )
+
         prompt = (
             f"ORIGINAL DECISION: {decision_question}\n\n"
             f"RESEARCH SUMMARY: {research_package.get('summary', '')}\n\n"
@@ -103,7 +117,8 @@ class SynthesisAgent:
             f"JUDGE VERDICT: {verdict.ruling.upper()}\n"
             f"REASONING: {verdict.reasoning}\n"
             f"KEY FACTORS: {', '.join(verdict.key_factors)}\n\n"
-            f"Output format: {output_format} — tailor your synthesis to this audience.\n\n"
+            f"Output format: {output_format} — tailor your synthesis to this audience.\n"
+            f"{anchor_block}\n\n"
             "Now produce a STRONGER, battle-tested version of the original idea "
             "that addresses every weakness exposed during this proceeding."
         )

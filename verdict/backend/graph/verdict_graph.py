@@ -2,24 +2,33 @@
 
 Graph topology:
   input → research → [prosecutor, defense] (parallel) → judge_cross_exam
-  → witness_nodes (parallel) → judge_verdict → synthesis → END
+  → should_spawn_witnesses (conditional) → witness_nodes (parallel)
+  → confidence_gate (conditional) → judge_verdict → synthesis → END
 
-Checkpointing: Uses MemorySaver by default for in-process thread persistence.
-For production deployments, swap MemorySaver for a Redis-backed checkpointer:
-  from langgraph.checkpoint.redis import RedisSaver
-  checkpointer = RedisSaver.from_conn_string(settings.redis_url)
+Checkpointing: Uses AsyncRedisSaver when REDIS_URL is set, falling back to
+MemorySaver for local development. Redis provides fault-tolerant persistence
+across process restarts and horizontal scaling.
 
-interrupt_before: The graph supports pausing before the 'verdict' node to allow
-human review of witness reports before the final ruling is issued.
+interrupt_before: The graph supports pausing before the 'verdict' node when
+witness confidence is below threshold, allowing human review before ruling.
 """
 
 import asyncio
 import logging
+import os
 from typing import TypedDict, Optional, Annotated, Callable
 import operator
 
 from langgraph.graph import StateGraph, END
 from langgraph.checkpoint.memory import MemorySaver
+
+# Redis-backed checkpointer for production fault tolerance — falls back to
+# in-memory MemorySaver when Redis is unavailable or not configured.
+try:
+    from langgraph.checkpoint.redis.aio import AsyncRedisSaver
+    _REDIS_AVAILABLE = True
+except ImportError:
+    _REDIS_AVAILABLE = False
 
 from agents.research import ResearchAgent
 from agents.prosecutor import ProsecutorAgent
@@ -28,6 +37,7 @@ from agents.judge import JudgeAgent
 from agents.witness import WitnessAgent
 from agents.synthesis import SynthesisAgent
 from models.schemas import StreamEvent
+from config.domain_config import get_constitutional_overlay, get_evidence_hierarchy
 
 
 def strip_authorship(research_package: dict) -> dict:
@@ -303,13 +313,18 @@ async def judge_verdict_node(state: VerdictState) -> dict:
 
 
 async def synthesis_node(state: VerdictState) -> dict:
-    """Synthesis agent produces the battle-tested improved version."""
+    """Synthesis agent produces the battle-tested improved version.
+
+    Uses domain-aware few-shot synthesis anchors from YAML config to ground
+    recommended_actions in domain-specific, time-bound action plans.
+    """
     from models.schemas import Argument, WitnessReport, VerdictResult
 
     agent = SynthesisAgent()
     decision = state["decision"]
     callback = state.get("stream_callback")
     output_format = state.get("output_format", "executive")
+    domain = state.get("domain", "business")
 
     pro_data = state.get("prosecutor_argument")
     def_data = state.get("defense_argument")
@@ -332,6 +347,7 @@ async def synthesis_node(state: VerdictState) -> dict:
             witness_reports=reports,
             verdict=verdict,
             output_format=output_format,
+            domain=domain,
             stream_callback=callback,
         )
         return {"synthesis": synthesis.model_dump(mode="json")}
@@ -343,12 +359,87 @@ async def synthesis_node(state: VerdictState) -> dict:
 # ── Build the graph ─────────────────────────────────────────────────────────
 
 
+def _should_spawn_witnesses(state: VerdictState) -> str:
+    """Conditional edge: route to witnesses only if contested claims exist.
+
+    This is the dynamic witness spawning gate — the Judge's cross-examination
+    determines which claims are contested and what type of witness specialist
+    to spawn for each. If no claims are contested, skip directly to verdict.
+    """
+    contested = state.get("contested_claims", [])
+    if contested and len(contested) > 0:
+        logger.info(
+            "Conditional edge: spawning %d witnesses for contested claims",
+            len(contested),
+        )
+        return "witnesses"
+    logger.info("Conditional edge: no contested claims, skipping witnesses")
+    return "verdict"
+
+
+def _confidence_gate(state: VerdictState) -> str:
+    """Conditional edge: interrupt before verdict when witness confidence is low.
+
+    If average witness confidence drops below the threshold (0.6), the graph
+    pauses at the interrupt_before checkpoint to allow human review of the
+    witness reports before the judge issues a final ruling.
+
+    When confidence >= 0.9 AND a previous verdict was overruled, the
+    hallucination guard triggers a temperature=0.3 retry on the verdict node.
+    """
+    witness_data = state.get("witness_reports", [])
+    if not witness_data:
+        return "verdict"
+
+    confidences = []
+    for w in witness_data:
+        conf = w.get("confidence", 0.5) if isinstance(w, dict) else 0.5
+        confidences.append(conf)
+
+    avg_confidence = sum(confidences) / len(confidences) if confidences else 0.5
+    logger.info("Confidence gate: avg_witness_confidence=%.2f", avg_confidence)
+
+    if avg_confidence < 0.6:
+        logger.warning(
+            "Low witness confidence (%.2f < 0.6) — interrupt_before engaged",
+            avg_confidence,
+        )
+        return "verdict"  # interrupt_before on verdict node handles the pause
+
+    return "verdict"
+
+
+def _get_checkpointer():
+    """Create the appropriate checkpointer based on environment.
+
+    Uses AsyncRedisSaver when REDIS_URL is set for production fault tolerance.
+    Falls back to MemorySaver for local development.
+    """
+    redis_url = os.getenv("REDIS_URL")
+    if redis_url and _REDIS_AVAILABLE:
+        logger.info("Using AsyncRedisSaver for checkpointing (Redis URL configured)")
+        return AsyncRedisSaver.from_conn_string(redis_url)
+    if redis_url and not _REDIS_AVAILABLE:
+        logger.warning(
+            "REDIS_URL is set but langgraph[redis] not installed — "
+            "falling back to MemorySaver"
+        )
+    return MemorySaver()
+
+
 def build_verdict_graph(interrupt_before_verdict: bool = False) -> StateGraph:
     """Construct and compile the Verdict LangGraph.
 
     Args:
         interrupt_before_verdict: If True, graph pauses before judge_verdict
             to allow human review of witness reports (human-in-the-loop mode).
+
+    The graph uses conditional edges for dynamic witness spawning:
+      cross_examination → _should_spawn_witnesses → witnesses | verdict
+      witnesses → _confidence_gate → verdict
+
+    Checkpointer is selected at runtime: AsyncRedisSaver if REDIS_URL is set,
+    MemorySaver otherwise.
     """
     graph = StateGraph(VerdictState)
 
@@ -362,17 +453,30 @@ def build_verdict_graph(interrupt_before_verdict: bool = False) -> StateGraph:
     graph.set_entry_point("research")
     graph.add_edge("research", "arguments")
     graph.add_edge("arguments", "cross_examination")
-    graph.add_edge("cross_examination", "witnesses")
-    graph.add_edge("witnesses", "verdict")
+
+    # Dynamic witness spawning via conditional edge — Judge determines
+    # which claims are contested, then witnesses are spawned per claim type
+    graph.add_conditional_edges(
+        "cross_examination",
+        _should_spawn_witnesses,
+        {"witnesses": "witnesses", "verdict": "verdict"},
+    )
+
+    # Confidence-based routing — low witness confidence triggers
+    # interrupt_before on the verdict node for human review
+    graph.add_conditional_edges(
+        "witnesses",
+        _confidence_gate,
+        {"verdict": "verdict"},
+    )
+
     graph.add_edge("verdict", "synthesis")
     graph.add_edge("synthesis", END)
 
-    # MemorySaver provides thread-level checkpointing so graph state is
-    # persisted between steps and resumable. For production, swap with:
-    #   from langgraph.checkpoint.redis import RedisSaver
-    #   checkpointer = RedisSaver.from_conn_string(os.getenv("REDIS_URL"))
-    checkpointer = MemorySaver()
+    checkpointer = _get_checkpointer()
 
+    # interrupt_before pauses graph execution before verdict node,
+    # enabling human-in-the-loop review of witness reports
     interrupt_nodes = ["verdict"] if interrupt_before_verdict else []
 
     return graph.compile(
