@@ -38,6 +38,9 @@ class SessionState(str, Enum):
     ERROR = "error"
     EXPIRED = "expired"
 
+    def __repr__(self) -> str:
+        return f"SessionState.{self.name}"
+
 
 # Valid state transitions — key is current state, value is set of valid next states
 _VALID_TRANSITIONS: dict[SessionState, set[SessionState]] = {
