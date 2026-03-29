@@ -661,3 +661,70 @@ async def get_shared_verdict(share_token: str):
             continue
 
     raise HTTPException(status_code=404, detail="Shared verdict not found")
+
+
+# ---------------------------------------------------------------------------
+# Session analytics endpoint
+# ---------------------------------------------------------------------------
+
+
+@router.get("/sessions/analytics")
+async def get_session_analytics():
+    """Aggregate analytics across all verdict sessions.
+
+    Returns statistics on ruling distribution, domain breakdown,
+    average confidence scores, and format usage — useful for
+    understanding decision patterns over time.
+    """
+    total = len(sessions)
+    if total == 0:
+        return {
+            "total_sessions": 0,
+            "ruling_distribution": {},
+            "domain_breakdown": {},
+            "format_usage": {},
+            "avg_verdict_confidence": 0.0,
+            "completion_rate": 0.0,
+        }
+
+    ruling_dist: dict[str, int] = {}
+    domain_dist: dict[str, int] = {}
+    format_dist: dict[str, int] = {}
+    confidences: list[float] = []
+    completed = 0
+
+    for session in sessions.values():
+        # Domain distribution
+        domain = session.get("domain", "business")
+        domain_dist[domain] = domain_dist.get(domain, 0) + 1
+
+        # Format usage
+        fmt = session.get("output_format", "executive")
+        format_dist[fmt] = format_dist.get(fmt, 0) + 1
+
+        # Check completion
+        if session.get("status") == "complete" and session.get("result"):
+            completed += 1
+            result = session["result"]
+
+            # Ruling distribution
+            verdict = result.get("verdict", {})
+            if verdict:
+                ruling = verdict.get("ruling", "unknown")
+                ruling_dist[ruling] = ruling_dist.get(ruling, 0) + 1
+
+                conf = verdict.get("confidence")
+                if conf is not None:
+                    confidences.append(float(conf))
+
+    avg_confidence = sum(confidences) / len(confidences) if confidences else 0.0
+
+    return {
+        "total_sessions": total,
+        "completed_sessions": completed,
+        "completion_rate": round(completed / total, 3) if total > 0 else 0.0,
+        "ruling_distribution": ruling_dist,
+        "domain_breakdown": domain_dist,
+        "format_usage": format_dist,
+        "avg_verdict_confidence": round(avg_confidence, 3),
+    }
