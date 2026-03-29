@@ -5,13 +5,13 @@ import json
 import logging
 import uuid
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Literal
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, HTTPException
-from fastapi.responses import JSONResponse, PlainTextResponse
+from fastapi.responses import JSONResponse, PlainTextResponse, Response
 from pydantic import BaseModel
 
-from services.export_service import generate_markdown_report, generate_json_report
+from services.export_service import generate_markdown_report, generate_json_report, generate_pdf_report
 
 from config import settings
 from models.schemas import Decision, StreamEvent
@@ -23,12 +23,21 @@ router = APIRouter(prefix="/api/verdict")
 # In-memory session store
 sessions: dict[str, dict] = {}
 
+# Valid output formats and their descriptions
+OUTPUT_FORMATS = {
+    "executive": "High-level summary for executives and decision-makers",
+    "technical": "In-depth technical analysis with implementation details",
+    "legal": "Formal legal-style analysis with precedents and risk assessment",
+    "investor": "Financial and market-focused analysis for investors",
+}
+
 
 class StartRequest(BaseModel):
     """Request body for starting a new verdict session."""
 
     question: str
     context: Optional[str] = None
+    output_format: Literal["executive", "technical", "legal", "investor"] = "executive"
 
 
 class StartResponse(BaseModel):
@@ -37,6 +46,98 @@ class StartResponse(BaseModel):
     session_id: str
     decision: dict
     status: str
+    output_format: str
+    domain: str
+
+
+class DetectDomainRequest(BaseModel):
+    """Request body for domain detection."""
+
+    question: str
+    context: Optional[str] = None
+
+
+class DetectDomainResponse(BaseModel):
+    """Response for domain detection."""
+
+    domain: str
+    confidence: float
+    suggested_format: str
+    reasoning: str
+
+
+@router.post("/detect-domain", response_model=DetectDomainResponse)
+async def detect_domain(request: DetectDomainRequest):
+    """Detect the decision domain and suggest the optimal output format.
+
+    Uses the LLM to classify the decision into a domain category and
+    recommends the most appropriate output format for that domain.
+    """
+    from langchain_groq import ChatGroq
+    from langchain_core.messages import SystemMessage, HumanMessage
+
+    llm = ChatGroq(
+        model="llama-3.3-70b-versatile",
+        temperature=0.1,
+        max_tokens=512,
+        api_key=settings.groq_api_key,
+    )
+
+    system_prompt = """You are a domain classifier for business decisions.
+Classify the given decision question into one of these domains:
+business, technology, legal, medical, financial, product, hiring, operations, marketing, strategic
+
+Also suggest the best output format: executive, technical, legal, or investor
+
+Respond with ONLY valid JSON:
+{
+  "domain": "string",
+  "confidence": 0.0-1.0,
+  "suggested_format": "executive|technical|legal|investor",
+  "reasoning": "string — one sentence explaining the classification"
+}"""
+
+    prompt = f"Decision: {request.question}"
+    if request.context:
+        prompt += f"\nContext: {request.context}"
+
+    try:
+        response = await llm.ainvoke([
+            SystemMessage(content=system_prompt),
+            HumanMessage(content=prompt),
+        ])
+
+        cleaned = response.content.strip()
+        if cleaned.startswith("```"):
+            cleaned = cleaned.split("\n", 1)[1] if "\n" in cleaned else cleaned[3:]
+            if cleaned.endswith("```"):
+                cleaned = cleaned[:-3]
+            cleaned = cleaned.strip()
+
+        data = json.loads(cleaned)
+        return DetectDomainResponse(
+            domain=data.get("domain", "business"),
+            confidence=data.get("confidence", 0.8),
+            suggested_format=data.get("suggested_format", "executive"),
+            reasoning=data.get("reasoning", "General business decision"),
+        )
+    except Exception as e:
+        logger.error("Domain detection failed: %s", e)
+        return DetectDomainResponse(
+            domain="business",
+            confidence=0.5,
+            suggested_format="executive",
+            reasoning="Could not classify — defaulting to business/executive",
+        )
+
+
+@router.get("/formats")
+async def get_output_formats():
+    """Return available output formats and their descriptions."""
+    return {"formats": [
+        {"id": k, "description": v}
+        for k, v in OUTPUT_FORMATS.items()
+    ]}
 
 
 @router.post("/start", response_model=StartResponse)
@@ -44,12 +145,18 @@ async def start_verdict(request: StartRequest):
     """Submit a decision for adversarial evaluation.
 
     Returns a session_id to connect via WebSocket for real-time streaming.
+    Auto-detects domain from the question for context-aware analysis.
     """
     decision = Decision(question=request.question, context=request.context)
+
+    # Quick domain classification (keyword heuristics, no LLM call)
+    domain = _classify_domain_heuristic(request.question)
 
     session = {
         "id": decision.id,
         "decision": decision.model_dump(mode="json"),
+        "output_format": request.output_format,
+        "domain": domain,
         "status": "created",
         "events": [],
         "result": None,
@@ -57,13 +164,38 @@ async def start_verdict(request: StartRequest):
     }
     sessions[decision.id] = session
 
-    logger.info("Session created: %s — %s", decision.id, request.question[:80])
+    logger.info(
+        "Session created: %s — %s [format=%s, domain=%s]",
+        decision.id, request.question[:80], request.output_format, domain,
+    )
 
     return StartResponse(
         session_id=decision.id,
         decision=decision.model_dump(mode="json"),
         status="created",
+        output_format=request.output_format,
+        domain=domain,
     )
+
+
+def _classify_domain_heuristic(question: str) -> str:
+    """Fast keyword-based domain classification (no LLM call needed at start)."""
+    q = question.lower()
+    if any(w in q for w in ("hire", "cto", "team", "employee", "recruit")):
+        return "hiring"
+    if any(w in q for w in ("raise", "series", "valuation", "invest", "vc", "fund")):
+        return "financial"
+    if any(w in q for w in ("acquire", "acquisition", "merge", "merger")):
+        return "strategic"
+    if any(w in q for w in ("legal", "lawsuit", "compliance", "regulation", "contract")):
+        return "legal"
+    if any(w in q for w in ("product", "feature", "launch", "mvp", "build")):
+        return "product"
+    if any(w in q for w in ("tech", "stack", "platform", "api", "cloud", "migrate")):
+        return "technology"
+    if any(w in q for w in ("market", "campaign", "brand", "customer", "growth")):
+        return "marketing"
+    return "business"
 
 
 @router.get("/sessions/history")
@@ -76,6 +208,8 @@ async def get_history():
             "question": session["decision"].get("question", ""),
             "status": session["status"],
             "created_at": session.get("created_at"),
+            "output_format": session.get("output_format", "executive"),
+            "domain": session.get("domain", "business"),
             "ruling": session.get("result", {}).get("verdict", {}).get("ruling") if session.get("result") else None,
         })
     return {"sessions": sorted(history, key=lambda x: x.get("created_at", ""), reverse=True)}
@@ -146,9 +280,14 @@ async def stream_verdict(websocket: WebSocket, session_id: str):
             result = await run_verdict_graph(
                 decision=session["decision"],
                 stream_callback=stream_callback,
+                output_format=session.get("output_format", "executive"),
+                domain=session.get("domain", "business"),
+                thread_id=session_id,
             )
             session["result"] = {
                 "decision": session["decision"],
+                "output_format": session.get("output_format", "executive"),
+                "domain": session.get("domain", "business"),
                 "research_package": result.get("research_package"),
                 "prosecutor_argument": result.get("prosecutor_argument"),
                 "defense_argument": result.get("defense_argument"),
@@ -178,7 +317,6 @@ async def stream_verdict(websocket: WebSocket, session_id: str):
         while True:
             event = await event_queue.get()
             if event is None:
-                # Pipeline complete — send final message
                 await websocket.send_json({
                     "event_type": "pipeline_complete",
                     "content": "All agents have completed.",
@@ -203,7 +341,7 @@ async def stream_verdict(websocket: WebSocket, session_id: str):
 
 
 # ---------------------------------------------------------------------------
-# Export & follow-up endpoints
+# Export endpoints
 # ---------------------------------------------------------------------------
 
 
@@ -222,7 +360,7 @@ async def export_markdown(session_id: str):
 
 @router.get("/{session_id}/export/json")
 async def export_json(session_id: str):
-    """Export the verdict session as JSON."""
+    """Export the verdict session as structured JSON."""
     session = sessions.get(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -231,6 +369,28 @@ async def export_json(session_id: str):
 
     report = generate_json_report(session["result"])
     return PlainTextResponse(content=report, media_type="application/json")
+
+
+@router.get("/{session_id}/export/pdf")
+async def export_pdf(session_id: str):
+    """Export the verdict session as a formatted PDF report."""
+    session = sessions.get(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if not session.get("result"):
+        raise HTTPException(status_code=202, detail="Session not complete")
+
+    pdf_bytes = generate_pdf_report(session["result"])
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename=verdict-{session_id[:8]}.pdf"},
+    )
+
+
+# ---------------------------------------------------------------------------
+# Follow-up Q&A endpoint
+# ---------------------------------------------------------------------------
 
 
 class FollowUpRequest(BaseModel):
@@ -250,8 +410,9 @@ async def followup_question(session_id: str, request: FollowUpRequest):
     from langchain_core.messages import SystemMessage, HumanMessage
 
     result = session["result"]
+    output_format = session.get("output_format", "executive")
+    domain = session.get("domain", "business")
 
-    # Build context from session
     context_parts = []
     if result.get("decision"):
         context_parts.append(f"Decision: {result['decision'].get('question', '')}")
@@ -273,11 +434,14 @@ async def followup_question(session_id: str, request: FollowUpRequest):
     )
 
     messages = [
-        SystemMessage(content=f"""You are a legal analyst following up on a courtroom AI analysis. Here's the context of the session:
+        SystemMessage(content=f"""You are a legal analyst following up on a courtroom AI analysis.
+Domain: {domain} | Output format: {output_format}
 
+Session context:
 {context}
 
-Answer the user's follow-up question based on this context. Be concise and insightful. Reference specific findings from the analysis when relevant."""),
+Answer the user's follow-up question based on this context. Be concise and insightful.
+Tailor your response to the {output_format} format and {domain} domain."""),
         HumanMessage(content=request.question),
     ]
 

@@ -4,11 +4,10 @@ import MicButton from './MicButton'
 import useVerdict from '../hooks/useVerdict'
 
 const OUTPUT_FORMATS = [
-  { id: 'executive', label: 'Executive Summary', icon: '📋' },
-  { id: 'research', label: 'Research Report', icon: '📊' },
-  { id: 'action', label: 'Action Plan', icon: '🎯' },
-  { id: 'investor', label: 'Investor Brief', icon: '💼' },
-  { id: 'quick', label: 'Quick Answer', icon: '⚡' },
+  { id: 'executive', label: 'Executive', icon: '📋' },
+  { id: 'technical', label: 'Technical', icon: '⚙️' },
+  { id: 'legal', label: 'Legal', icon: '⚖️' },
+  { id: 'investor', label: 'Investor', icon: '💼' },
 ]
 
 const SUGGESTIONS = [
