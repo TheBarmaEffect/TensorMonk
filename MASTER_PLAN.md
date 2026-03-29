@@ -76,7 +76,14 @@ Build a **multi-agent adversarial AI courtroom** that takes any decision or idea
 | Async event bus (Observer pattern) | ✅ | `utils/event_bus.py` with topic pub/sub |
 | Confidence calibration (ECE) | ✅ | `utils/confidence_calibration.py` per-agent tracking |
 | Domain-aware input validators | ✅ | `utils/validators.py` with quality scoring |
-| 273 tests (unit + integration) | ✅ | 18 test files (pytest) |
+| Pipeline metrics + event bus wired into all graph nodes | ✅ | Every node emits start/complete/error events with rich payloads |
+| Adaptive temperature from research quality | ✅ | `_adaptive_temperature()` adjusts prosecutor/defense LLM temp |
+| Witness-calibrated confidence tracking | ✅ | `_calibrate_from_witnesses()` uses verdicts as ground truth |
+| Witness-weighted evidence scoring | ✅ | `judge.compute_evidence_score()` adjusts verdict confidence |
+| Research quality scoring (5 dimensions) | ✅ | `research.score_research_quality()` — breadth/depth/grounding/balance |
+| Synthesis coverage assessment | ✅ | `synthesis.assess_synthesis_coverage()` — objection/action/strength |
+| Argument strength analysis | ✅ | `judge.analyze_argument_strength()` pre-cross-examination |
+| 283 tests (unit + integration) | ✅ | 18 test files (pytest) |
 
 ### Pre-Committed Cut Rule
 > "Analytics charts are cut before the courtroom UI is degraded."
@@ -107,7 +114,7 @@ All Tier 2 features were moved to functional status. The courtroom UI was never 
 | Test File | Count | Scope |
 |-----------|-------|-------|
 | test_schemas.py | 11 | Pydantic model validation, confidence bounds |
-| test_graph.py | 15 | Graph topology, strip_authorship, conditional edges |
+| test_graph.py | 25 | Graph topology, strip_authorship, conditional edges, adaptive temp, calibration |
 | test_api.py | 19 | API contracts, input validation, domain detection |
 | test_exports.py | 11 | PDF/DOCX/MD/JSON generation, domain themes |
 | test_resilience.py | 12 | Retry backoff, circuit breaker states |
@@ -124,7 +131,7 @@ All Tier 2 features were moved to functional status. The courtroom UI was never 
 | test_validators.py | 22 | Question quality, research completeness, format-domain fit |
 | test_event_bus.py | 20 | Pub/sub delivery, topic matching, priority ordering |
 | test_calibration.py | 19 | ECE computation, overconfidence detection, domain tracking |
-| **Total** | **273** | |
+| **Total** | **283** | |
 
 ## Technical Decisions
 
