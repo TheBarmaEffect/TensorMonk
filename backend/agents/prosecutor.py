@@ -11,6 +11,7 @@ from typing import Callable, Optional
 
 from langchain_core.messages import SystemMessage, HumanMessage
 
+from agents.prompts import get_format_instruction
 from config.domain_config import get_constitutional_overlay, get_evidence_hierarchy
 from models.schemas import Argument, Claim, StreamEvent
 from utils.resilience import retry_with_backoff
@@ -78,12 +79,7 @@ class ProsecutorAgent:
         Returns:
             A structured Argument from the prosecution.
         """
-        format_guidance = {
-            "executive": "Frame arguments around strategic value, market opportunity, and competitive advantage.",
-            "technical": "Focus on technical feasibility, implementation advantages, and engineering evidence.",
-            "legal": "Emphasize legal precedents, regulatory compliance benefits, and risk mitigation.",
-            "investor": "Highlight ROI potential, market size, growth trajectory, and competitive moat.",
-        }.get(output_format, "")
+        format_guidance = get_format_instruction(output_format)
 
         # Domain-aware constitutional overlay — loaded from YAML config at runtime.
         # Each domain defines argumentation constraints, evidence hierarchy, and

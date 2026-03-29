@@ -11,6 +11,7 @@ from typing import Callable, Optional
 
 from langchain_core.messages import SystemMessage, HumanMessage
 
+from agents.prompts import get_format_instruction
 from config.domain_config import get_constitutional_overlay, get_evidence_hierarchy
 from models.schemas import Argument, Claim, StreamEvent
 from utils.resilience import retry_with_backoff
@@ -78,12 +79,7 @@ class DefenseAgent:
         Returns:
             A structured Argument from the defense.
         """
-        format_guidance = {
-            "executive": "Frame objections around strategic risk, market headwinds, and execution challenges.",
-            "technical": "Focus on technical debt, scalability concerns, and implementation risks.",
-            "legal": "Emphasize regulatory risk, liability exposure, and legal precedents against.",
-            "investor": "Highlight burn rate concerns, market saturation, competitive threats, and downside scenarios.",
-        }.get(output_format, "")
+        format_guidance = get_format_instruction(output_format)
 
         # Domain-aware constitutional overlay — loaded from YAML config at runtime.
         # Each domain defines argumentation constraints, evidence hierarchy, and
